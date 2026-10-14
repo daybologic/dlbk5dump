@@ -5,6 +5,7 @@
 
 class TReadPersons {
 public:
+	int Dump() const;
 	int Find(const std::string& query) const;
 };
 

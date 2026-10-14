@@ -59,8 +59,11 @@ int main(int argc, char **argv)
 	if ( argc == 3 && strcmp(argv[1], "--person") == 0 ) {
 		return persons.Find(argv[2]);
 	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-persons") == 0 ) {
+		return persons.Dump();
+	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();

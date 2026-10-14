@@ -12,6 +12,7 @@
 
 namespace {
 const char *const PERSON_FILE = "BK5/BKPERSON.DT5";
+const std::size_t PAGE_SIZE = 1024U;
 const std::size_t CONTEXT_AFTER = 128U;
 
 std::string Upper(const std::string& value)
@@ -96,6 +97,97 @@ void PrintCandidateFields(const std::vector<unsigned char>& data,
 		std::cout << std::setfill(' ') << std::dec << '\n';
 	}
 }
+
+void PrintBinary(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length)
+{
+	std::cout << "bytes=";
+	for ( std::size_t i = 0U; i < length; ++i ) {
+		std::cout << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned int>(data[offset + i]);
+	}
+	std::cout << std::setfill(' ') << std::dec;
+}
+
+void PrintField(const std::vector<unsigned char>& data,
+	std::size_t marker, std::size_t page, std::size_t fileOffset)
+{
+	const std::size_t length = static_cast<std::size_t>(data[marker + 1U])
+		+ (static_cast<std::size_t>(data[marker + 2U]) << 8U);
+	const std::size_t value = marker + 3U;
+	if ( length == 0U || length > 256U || value + length > data.size() ) return;
+	std::cout << "FIELD page=" << page << " offset=" << fileOffset
+		<< " length=" << length << " ";
+	if ( MostlyPrintable(data, value, length) ) {
+		std::cout << "text=\"";
+		for ( std::size_t i = 0U; i < length; ++i ) {
+			const unsigned char ch = data[value + i];
+			std::cout << (Printable(ch) ? static_cast<char>(ch) : '.');
+		}
+		std::cout << "\"\n";
+		return;
+	}
+	PrintBinary(data, value, length);
+	if ( length == 8U ) {
+		std::cout << " le32=[0x" << std::hex << LittleEndian32(data, value)
+			<< ",0x" << LittleEndian32(data, value + 4U)
+			<< "] be32=[0x" << BigEndian32(data, value)
+			<< ",0x" << BigEndian32(data, value + 4U) << std::dec << "]";
+	}
+	std::cout << '\n';
+}
+
+bool MostlyUpperText(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length)
+{
+	std::size_t letters = 0U;
+	std::size_t upper = 0U;
+	for ( std::size_t i = 0U; i < length; ++i ) {
+		const unsigned char ch = data[offset + i];
+		if ( std::isalpha(ch) ) {
+			letters++;
+			if ( std::isupper(ch) ) upper++;
+		}
+	}
+	return letters >= 4U && upper * 2U >= letters;
+}
+}
+
+int TReadPersons::Dump() const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	std::cout << "BKPERSON.DT5 size=" << data.size()
+		<< " page_size=" << PAGE_SIZE << " pages=" << pageCount << '\n';
+	for ( std::size_t page = 0U; page < pageCount; ++page ) {
+		const std::size_t pageBegin = page * PAGE_SIZE;
+		const std::size_t pageEnd = pageBegin + PAGE_SIZE;
+		for ( std::size_t offset = pageBegin; offset + 3U <= pageEnd; ++offset ) {
+			if ( data[offset] == 0x20U )
+				PrintField(data, offset, page, offset);
+		}
+		for ( std::size_t offset = pageBegin; offset < pageEnd; ) {
+			while ( offset < pageEnd && !Printable(data[offset]) ) offset++;
+			const std::size_t begin = offset;
+			while ( offset < pageEnd && Printable(data[offset]) ) offset++;
+			const std::size_t length = offset - begin;
+			if ( length >= 8U && MostlyUpperText(data, begin, length) ) {
+				std::cout << "TEXT page=" << page << " offset=" << begin
+					<< " length=" << length << " text=\"";
+				for ( std::size_t i = 0U; i < length; ++i )
+					std::cout << static_cast<char>(data[begin + i]);
+				std::cout << "\"\n";
+			}
+		}
+	}
+	return 0;
 }
 
 int TReadPersons::Find(const std::string& query) const
