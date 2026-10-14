@@ -57,6 +57,18 @@ std::uint32_t BigEndian32(const std::vector<unsigned char>& data,
 		| static_cast<std::uint32_t>(data[offset + 3U]);
 }
 
+std::uint32_t BtrieveAddress(const std::vector<unsigned char>& data,
+	std::size_t offset)
+{
+	/* Old Btrieve stores a file address as two little-endian words, with
+	 * the high word first. */
+	const std::uint32_t high = static_cast<std::uint32_t>(data[offset])
+		| (static_cast<std::uint32_t>(data[offset + 1U]) << 8U);
+	const std::uint32_t low = static_cast<std::uint32_t>(data[offset + 2U])
+		| (static_cast<std::uint32_t>(data[offset + 3U]) << 8U);
+	return (high << 16U) | low;
+}
+
 void PrintBinary(const std::vector<unsigned char>& data,
 	std::size_t offset, std::size_t length);
 
@@ -69,20 +81,20 @@ void PrintRelatedBlock(const std::vector<unsigned char>& data,
 	const std::uint32_t header = BigEndian32(data, value);
 	const std::uint32_t descriptor = LittleEndian32(data, value + 4U);
 	const unsigned int tag = data[value + 8U];
-	const unsigned int ordinal = static_cast<unsigned int>(data[value + 9U])
-		| (static_cast<unsigned int>(data[value + 10U]) << 8U)
-		| (static_cast<unsigned int>(data[value + 11U]) << 16U);
-	const std::uint32_t pointer = BigEndian32(data, value + 12U);
+	const std::uint32_t ordinal = LittleEndian32(data, value + 9U);
+	const std::uint32_t pointer = (static_cast<std::uint32_t>(data[value + 13U]) << 16U)
+		| (static_cast<std::uint32_t>(data[value + 14U]) << 8U)
+		| static_cast<std::uint32_t>(data[value + 15U]);
 	std::cout << " header=0x" << std::hex << header
 		<< " descriptor=0x" << descriptor
 		<< " tag=0x" << tag << " ordinal=0x" << ordinal
-		<< " pointer=0x" << pointer << std::dec;
+		<< " pointer24=0x" << pointer << std::dec;
 	if ( pointer < data.size() ) {
-		std::cout << " pointer_as_offset=" << pointer
-			<< " page_if_offset=" << pointer / PAGE_SIZE
-			<< " page_offset_if_offset=" << pointer % PAGE_SIZE;
+		std::cout << " file_offset=" << pointer
+			<< " page=" << pointer / PAGE_SIZE
+			<< " page_offset=" << pointer % PAGE_SIZE;
 	} else {
-		std::cout << " pointer_as_offset=outside-BKPERSON.DT5";
+		std::cout << " file_offset=outside-BKPERSON.DT5";
 	}
 	std::cout << '\n';
 }
@@ -233,8 +245,12 @@ void PrintIndexReference(const std::vector<unsigned char>& data,
 {
 	std::cout << " ref1=";
 	PrintBinary(data, offset, 4U);
+	std::cout << "(address=0x" << std::hex << BtrieveAddress(data, offset)
+		<< std::dec << ")";
 	std::cout << " ref2=";
 	PrintBinary(data, offset + 4U, 4U);
+	std::cout << "(address=0x" << std::hex
+		<< BtrieveAddress(data, offset + 4U) << std::dec << ")";
 	std::cout << " link=";
 	PrintBinary(data, offset + 8U, 4U);
 	std::cout << '\n';
