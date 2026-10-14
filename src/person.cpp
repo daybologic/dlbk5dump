@@ -217,6 +217,28 @@ void PrintText(const std::vector<unsigned char>& data,
 	for ( std::size_t i = 0U; i < length; ++i )
 		std::cout << static_cast<char>(data[offset + i]);
 }
+
+bool FixedIndexKey(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length, std::size_t pageEnd)
+{
+	if ( offset + length + 12U > pageEnd ) return false;
+	for ( std::size_t i = 0U; i < length; ++i ) {
+		if ( !Printable(data[offset + i]) ) return false;
+	}
+	return true;
+}
+
+void PrintIndexReference(const std::vector<unsigned char>& data,
+	std::size_t offset)
+{
+	std::cout << " ref1=";
+	PrintBinary(data, offset, 4U);
+	std::cout << " ref2=";
+	PrintBinary(data, offset + 4U, 4U);
+	std::cout << " link=";
+	PrintBinary(data, offset + 8U, 4U);
+	std::cout << '\n';
+}
 }
 
 int TReadPersons::Dump() const
@@ -305,6 +327,53 @@ int TReadPersons::DumpPage(unsigned int page) const
 		std::cout << "\"\n";
 		PrintCandidateFields(data, nameEnd, recordEnd);
 	}
+	return 0;
+}
+
+int TReadPersons::DumpIndexPage(unsigned int page) const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	if ( page >= pageCount ) {
+		std::cerr << "Error: page " << page << " is outside the file ("
+			<< pageCount << " pages)\n";
+		return 2;
+	}
+	const std::size_t pageBegin = static_cast<std::size_t>(page) * PAGE_SIZE;
+	const std::size_t pageEnd = pageBegin + PAGE_SIZE;
+	std::cout << "INDEX_PAGE " << page << " file_offset=" << pageBegin
+		<< " size=" << PAGE_SIZE << "\n";
+	std::cout << "  header=";
+	PrintBinary(data, pageBegin, 16U);
+	std::cout << '\n';
+	bool found = false;
+	for ( std::size_t offset = pageBegin + 16U;
+		offset + 52U <= pageEnd; ++offset ) {
+		std::size_t keyLength = 0U;
+		if ( FixedIndexKey(data, offset, 40U, pageEnd) ) keyLength = 40U;
+		else if ( FixedIndexKey(data, offset, 10U, pageEnd) ) keyLength = 10U;
+		if ( keyLength == 0U ) continue;
+		/* Index entries are fixed-width keys followed by two references
+		 * and a four-byte child/link value. Avoid reporting the middle of
+		 * a key as another candidate. */
+		if ( offset > pageBegin + 16U &&
+			(data[offset - 1U] == ' ' || Printable(data[offset - 1U])) )
+			continue;
+		std::cout << "  ENTRY offset=" << offset << " key=\"";
+		PrintText(data, offset, keyLength);
+		std::cout << "\"";
+		PrintIndexReference(data, offset + keyLength);
+		found = true;
+		offset += keyLength + 11U;
+	}
+	if ( !found ) std::cout << "  no fixed-width index entries detected\n";
 	return 0;
 }
 
