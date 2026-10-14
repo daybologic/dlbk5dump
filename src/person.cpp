@@ -57,9 +57,40 @@ std::uint32_t BigEndian32(const std::vector<unsigned char>& data,
 		| static_cast<std::uint32_t>(data[offset + 3U]);
 }
 
+void PrintBinary(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length);
+
+void PrintRelatedBlock(const std::vector<unsigned char>& data,
+	std::size_t value, std::size_t fieldOffset)
+{
+	std::cout << "    RELATED_BLOCK field+0x" << std::hex << fieldOffset
+		<< std::dec << " ";
+	PrintBinary(data, value, 16U);
+	const std::uint32_t header = BigEndian32(data, value);
+	const std::uint32_t descriptor = LittleEndian32(data, value + 4U);
+	const unsigned int tag = data[value + 8U];
+	const unsigned int ordinal = static_cast<unsigned int>(data[value + 9U])
+		| (static_cast<unsigned int>(data[value + 10U]) << 8U)
+		| (static_cast<unsigned int>(data[value + 11U]) << 16U);
+	const std::uint32_t pointer = BigEndian32(data, value + 12U);
+	std::cout << " header=0x" << std::hex << header
+		<< " descriptor=0x" << descriptor
+		<< " tag=0x" << tag << " ordinal=0x" << ordinal
+		<< " pointer=0x" << pointer << std::dec;
+	if ( pointer < data.size() ) {
+		std::cout << " pointer_as_offset=" << pointer
+			<< " page_if_offset=" << pointer / PAGE_SIZE
+			<< " page_offset_if_offset=" << pointer % PAGE_SIZE;
+	} else {
+		std::cout << " pointer_as_offset=outside-BKPERSON.DT5";
+	}
+	std::cout << '\n';
+}
+
 void PrintCandidateFields(const std::vector<unsigned char>& data,
 	std::size_t begin, std::size_t end)
 {
+	bool related = false;
 	for ( std::size_t offset = begin; offset + 3U <= end; ++offset ) {
 		/* Text fields observed in BKPERSON use 0x20 followed by a
 		 * little-endian length. This remains a candidate decoder until
@@ -69,8 +100,20 @@ void PrintCandidateFields(const std::vector<unsigned char>& data,
 			+ (static_cast<std::size_t>(data[offset + 2U]) << 8U);
 		const std::size_t value = offset + 3U;
 		if ( length == 0U || length > 128U || value + length > end ) continue;
+		const bool relatedMarker = length == 16U
+			&& data[value] == 0x00U && data[value + 1U] == 0x00U
+			&& data[value + 2U] == 0x00U && data[value + 3U] == 0x07U
+			&& data[value + 4U] == 0x00U && data[value + 5U] == 0x20U
+			&& data[value + 6U] == 0x01U && data[value + 7U] == 0x00U
+			&& data[value + 8U] == 0x2aU;
+		if ( relatedMarker ) {
+			related = true;
+			PrintRelatedBlock(data, value, offset - begin);
+			continue;
+		}
 		std::cout << "    field+0x" << std::hex << offset - begin
 			<< std::dec << " length " << length << ": ";
+		if ( related ) std::cout << "related ";
 		if ( MostlyPrintable(data, value, length) ) {
 			std::string text;
 			for ( std::size_t i = 0U; i < length; ++i ) {
@@ -151,6 +194,29 @@ bool MostlyUpperText(const std::vector<unsigned char>& data,
 	}
 	return letters >= 4U && upper * 2U >= letters;
 }
+
+bool NameCandidate(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length)
+{
+	if ( length < 12U || length > 60U || !MostlyUpperText(data, offset, length) )
+		return false;
+	/* Date, occupation, and note values are normally introduced by a
+	 * 0x20 field marker with a length greater than one. A name may use
+	 * the one-byte marker, so reject the former without rejecting names. */
+	if ( offset >= 3U && data[offset - 3U] == 0x20U
+		&& data[offset - 2U] != 0x01U ) return false;
+	std::size_t spaces = 0U;
+	for ( std::size_t i = 0U; i < length; ++i )
+		if ( data[offset + i] == ' ' ) spaces++;
+	return spaces >= 2U;
+}
+
+void PrintText(const std::vector<unsigned char>& data,
+	std::size_t offset, std::size_t length)
+{
+	for ( std::size_t i = 0U; i < length; ++i )
+		std::cout << static_cast<char>(data[offset + i]);
+}
 }
 
 int TReadPersons::Dump() const
@@ -186,6 +252,58 @@ int TReadPersons::Dump() const
 				std::cout << "\"\n";
 			}
 		}
+	}
+	return 0;
+}
+
+int TReadPersons::DumpPage(unsigned int page) const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	if ( page >= pageCount ) {
+		std::cerr << "Error: page " << page << " is outside the file ("
+			<< pageCount << " pages)\n";
+		return 2;
+	}
+	const std::size_t pageBegin = static_cast<std::size_t>(page) * PAGE_SIZE;
+	const std::size_t pageEnd = pageBegin + PAGE_SIZE;
+	std::cout << "PAGE " << page << " file_offset=" << pageBegin
+		<< " size=" << PAGE_SIZE << "\n";
+	std::cout << "  header=";
+	PrintBinary(data, pageBegin, 16U);
+	std::cout << '\n';
+
+	std::vector<std::pair<std::size_t, std::size_t> > candidates;
+	for ( std::size_t offset = pageBegin; offset < pageEnd; ) {
+		while ( offset < pageEnd && !Printable(data[offset]) ) offset++;
+		const std::size_t begin = offset;
+		while ( offset < pageEnd && Printable(data[offset]) ) offset++;
+		const std::size_t length = offset - begin;
+		if ( NameCandidate(data, begin, length) )
+			candidates.push_back(std::make_pair(begin, length));
+	}
+	if ( candidates.empty() ) {
+		std::cout << "  no candidate person records\n";
+		return 0;
+	}
+	for ( std::size_t i = 0U; i < candidates.size(); ++i ) {
+		const std::size_t nameBegin = candidates[i].first;
+		const std::size_t nameEnd = nameBegin + candidates[i].second;
+		const std::size_t recordEnd = i + 1U < candidates.size()
+			? candidates[i + 1U].first : pageEnd;
+		std::cout << "  NAME_ANCHOR name_offset=" << nameBegin
+			<< " span=" << nameBegin << ".." << recordEnd << '\n';
+		std::cout << "    name_text=\"";
+		PrintText(data, nameBegin, candidates[i].second);
+		std::cout << "\"\n";
+		PrintCandidateFields(data, nameEnd, recordEnd);
 	}
 	return 0;
 }

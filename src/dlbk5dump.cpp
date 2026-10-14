@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <dirent.h>
 #include <cstring>
@@ -62,8 +63,17 @@ int main(int argc, char **argv)
 	if ( argc == 2 && strcmp(argv[1], "--dump-persons") == 0 ) {
 		return persons.Dump();
 	}
+	if ( argc == 3 && strcmp(argv[1], "--page") == 0 ) {
+		char *end = NULL;
+		const unsigned long page = strtoul(argv[2], &end, 10);
+		if ( end == argv[2] || *end != '\0' || page > 0xffffffffUL ) {
+			fprintf(stderr, "Error: page must be a non-negative integer\n");
+			return 2;
+		}
+		return persons.DumpPage(static_cast<unsigned int>(page));
+	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
