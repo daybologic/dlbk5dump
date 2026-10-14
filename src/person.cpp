@@ -255,6 +255,27 @@ void PrintIndexReference(const std::vector<unsigned char>& data,
 	PrintBinary(data, offset + 8U, 4U);
 	std::cout << '\n';
 }
+
+void PrintTraceBytes(const std::vector<unsigned char>& data,
+	std::size_t begin, std::size_t end)
+{
+	for ( std::size_t offset = begin; offset < end; offset += 16U ) {
+		std::cout << "  " << std::hex << std::setw(8) << std::setfill('0')
+			<< offset << "  ";
+		const std::size_t lineEnd = std::min(offset + 16U, end);
+		for ( std::size_t i = offset; i < lineEnd; ++i ) {
+			std::cout << std::setw(2) << static_cast<unsigned int>(data[i])
+				<< ' ';
+		}
+		for ( std::size_t i = lineEnd; i < offset + 16U; ++i )
+			std::cout << "   ";
+		std::cout << " |";
+		for ( std::size_t i = offset; i < lineEnd; ++i )
+			std::cout << (Printable(data[i]) ? static_cast<char>(data[i]) : '.');
+		std::cout << "|\n";
+	}
+	std::cout << std::setfill(' ') << std::dec;
+}
 }
 
 int TReadPersons::Dump() const
@@ -390,6 +411,81 @@ int TReadPersons::DumpIndexPage(unsigned int page) const
 		offset += keyLength + 11U;
 	}
 	if ( !found ) std::cout << "  no fixed-width index entries detected\n";
+	return 0;
+}
+
+int TReadPersons::DumpIndex() const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	std::cout << "INDEX_SCAN file_size=" << data.size()
+		<< " page_size=" << PAGE_SIZE << " pages=" << pageCount << '\n';
+	for ( std::size_t page = 0U; page < pageCount; ++page ) {
+		const std::size_t pageBegin = page * PAGE_SIZE;
+		const std::size_t pageEnd = pageBegin + PAGE_SIZE;
+		for ( std::size_t offset = pageBegin + 16U;
+			offset + 52U <= pageEnd; ++offset ) {
+			std::size_t keyLength = 0U;
+			if ( FixedIndexKey(data, offset, 40U, pageEnd) ) keyLength = 40U;
+			else if ( FixedIndexKey(data, offset, 10U, pageEnd) ) keyLength = 10U;
+			if ( keyLength == 0U ) continue;
+			if ( offset > pageBegin + 16U &&
+				(data[offset - 1U] == ' ' || Printable(data[offset - 1U])) )
+				continue;
+			std::cout << "ENTRY page=" << page << " offset=" << offset
+				<< " key=\"";
+			PrintText(data, offset, keyLength);
+			std::cout << "\"";
+			PrintIndexReference(data, offset + keyLength);
+			offset += keyLength + 11U;
+		}
+	}
+	return 0;
+}
+
+int TReadPersons::TraceAddress(std::uint32_t address) const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	if ( address >= data.size() ) {
+		std::cerr << "Error: address 0x" << std::hex << address << std::dec
+			<< " is outside the file (" << data.size() << " bytes)\n";
+		return 2;
+	}
+	const std::size_t page = address / PAGE_SIZE;
+	const std::size_t pageOffset = address % PAGE_SIZE;
+	const std::size_t begin = address >= 16U ? address - 16U : 0U;
+	const std::size_t end = std::min(data.size(),
+		static_cast<std::size_t>(address) + 64U);
+	std::cout << "ADDRESS address=0x" << std::hex << address << std::dec
+		<< " file_offset=" << address << " page=" << page
+		<< " page_offset=" << pageOffset << '\n';
+	PrintTraceBytes(data, begin, end);
+	std::cout << "REFERENCES\n";
+	for ( std::size_t offset = begin; offset + 4U <= end; ++offset ) {
+		/* In this file the high word is stored first and is little-endian;
+		 * reject arbitrary byte sequences before decoding them as pointers. */
+		if ( data[offset + 1U] != 0x00U || data[offset] > 0x02U ) continue;
+		const std::uint32_t candidate = BtrieveAddress(data, offset);
+		if ( candidate == 0U || candidate == 0xffffffffU || candidate >= data.size() )
+			continue;
+		std::cout << "  offset=" << offset << " address=0x" << std::hex
+			<< candidate << std::dec << " page=" << candidate / PAGE_SIZE
+			<< " page_offset=" << candidate % PAGE_SIZE << '\n';
+	}
 	return 0;
 }
 

@@ -81,8 +81,20 @@ int main(int argc, char **argv)
 		}
 		return persons.DumpIndexPage(static_cast<unsigned int>(page));
 	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-index") == 0 ) {
+		return persons.DumpIndex();
+	}
+	if ( argc == 3 && strcmp(argv[1], "--trace-address") == 0 ) {
+		char *end = NULL;
+		const unsigned long address = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || address > 0xffffffffUL ) {
+			fprintf(stderr, "Error: address must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.TraceAddress(static_cast<std::uint32_t>(address));
+	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N|--index-page N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N|--index-page N|--dump-index|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
