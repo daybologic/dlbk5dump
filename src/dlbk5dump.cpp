@@ -2,9 +2,11 @@
 #include <iostream>
 #include <dirent.h>
 #include <cstring>
+#include <string>
 //#include <map>
 
 #include "marriage.hpp"
+#include "person.hpp"
 
 using namespace std;
 //---------------------------------------------------------------------------
@@ -45,13 +47,21 @@ static bool CheckFiles()
 	return false;
 }
 //---------------------------------------------------------------------------
-int main()
+int main(int argc, char **argv)
 {
 	TReadMarriages marriages;
+	TReadPersons persons;
 
 	if ( !CheckFiles() ) {
 		puts("Error: Files don\'t exist");
 		return 1;
+	}
+	if ( argc == 3 && strcmp(argv[1], "--person") == 0 ) {
+		return persons.Find(argv[2]);
+	}
+	if ( argc != 1 ) {
+		fprintf(stderr, "Usage: %s [--person TEXT]\n", argv[0]);
+		return 2;
 	}
 	marriages.Load();
 	puts("All files exist.");
