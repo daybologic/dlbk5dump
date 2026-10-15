@@ -2,3 +2,4 @@ BK5/
 /dlbk5dump
 src/*.o
 src/*.d
+CORRECTIONS.md
