@@ -84,6 +84,9 @@ int main(int argc, char **argv)
 	if ( argc == 2 && strcmp(argv[1], "--dump-index") == 0 ) {
 		return persons.DumpIndex();
 	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-relations") == 0 ) {
+		return persons.DumpRelations();
+	}
 	if ( argc == 3 && strcmp(argv[1], "--trace-address") == 0 ) {
 		char *end = NULL;
 		const unsigned long address = strtoul(argv[2], &end, 0);
@@ -94,7 +97,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N|--index-page N|--dump-index|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N|--index-page N|--dump-index|--dump-relations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();

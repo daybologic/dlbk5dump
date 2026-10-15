@@ -450,6 +450,59 @@ int TReadPersons::DumpIndex() const
 	return 0;
 }
 
+int TReadPersons::DumpRelations() const
+{
+	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);
+	if ( !personFile.is_open() ) {
+		std::cerr << "Error: cannot open " << PERSON_FILE << '\n';
+		return 1;
+	}
+	const std::vector<unsigned char> data(
+		(std::istreambuf_iterator<char>(personFile)),
+		std::istreambuf_iterator<char>());
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	std::cout << "RELATION_SCAN file_size=" << data.size()
+		<< " page_size=" << PAGE_SIZE << " pages=" << pageCount << '\n';
+	for ( std::size_t page = 0U; page < pageCount; ++page ) {
+		const std::size_t pageBegin = page * PAGE_SIZE;
+		const std::size_t pageEnd = pageBegin + PAGE_SIZE;
+		for ( std::size_t offset = pageBegin + 5U;
+			offset + 17U <= pageEnd; ++offset ) {
+			/* Relationship-table entries observed in the data begin with a
+			 * two-word header ending in 01. Do not scan arbitrary four-byte
+			 * sequences as pointers. */
+			if ( data[offset] != 0x00U || data[offset + 2U] != 0x00U
+				|| data[offset + 4U] != 0x01U || data[offset + 3U] == 0x20U ) continue;
+			bool found = false;
+			std::vector<std::uint32_t> targets;
+			for ( const std::size_t relative : { 5U, 9U, 13U } ) {
+				if ( data[offset + relative + 1U] != 0x00U
+					|| data[offset + relative] > 0x02U ) continue;
+				const std::uint32_t target = BtrieveAddress(data,
+					offset + relative);
+				if ( target == 0U || target == 0xffffffffU
+					|| target >= data.size() ) continue;
+				targets.push_back(target);
+				found = true;
+			}
+			if ( !found ) continue;
+			std::cout << "RELATION page=" << page << " offset=" << offset
+				<< " header=";
+			PrintBinary(data, offset, 5U);
+			std::cout << " targets=";
+			for ( std::size_t i = 0U; i < targets.size(); ++i ) {
+				if ( i != 0U ) std::cout << ',';
+				std::cout << "0x" << std::hex << targets[i] << std::dec;
+			}
+			std::cout << '\n';
+			/* Candidate entries can contain padding, but a second candidate
+			 * inside this one is not a separate record. */
+			offset += 16U;
+		}
+	}
+	return 0;
+}
+
 int TReadPersons::TraceAddress(std::uint32_t address) const
 {
 	std::ifstream personFile(PERSON_FILE, std::ios::in | std::ios::binary);

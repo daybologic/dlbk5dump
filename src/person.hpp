@@ -10,6 +10,7 @@ public:
 	int DumpPage(unsigned int page) const;
 	int DumpIndexPage(unsigned int page) const;
 	int DumpIndex() const;
+	int DumpRelations() const;
 	int TraceAddress(std::uint32_t address) const;
 	int Find(const std::string& query) const;
 };
