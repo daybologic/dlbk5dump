@@ -39,6 +39,17 @@ def gedcom_date(value):
     return " ".join(fields)
 
 
+def gedcom_name(value):
+    """Mark the final name component as the GEDCOM surname."""
+    name = value.strip()
+    if "/" in name:
+        return name
+    fields = name.split()
+    if len(fields) < 2:
+        return name
+    return "{} /{}/".format(" ".join(fields[:-1]), fields[-1])
+
+
 def run_dump(*args):
     return subprocess.check_output(["./dlbk5dump", *args], text=True,
                                    stderr=subprocess.DEVNULL)
@@ -316,7 +327,7 @@ def main():
     for person_id in sorted(people):
         person = people[person_id]
         emit("0 @I{}@ INDI".format(person_id))
-        emit("1 NAME {}".format(person["name"]))
+        emit("1 NAME {}".format(gedcom_name(person["name"])))
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
         if person["occupation"]:
@@ -385,7 +396,7 @@ def main():
 
     for person in raw_unmerged:
         emit("0 @I{}@ INDI".format(person["xref"]))
-        emit("1 NAME {}".format(raw_display_name(person)))
+        emit("1 NAME {}".format(gedcom_name(raw_display_name(person))))
         emit("1 NOTE BK5 raw name: {}".format(person["raw_name"]))
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
