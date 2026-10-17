@@ -51,8 +51,6 @@ def gedcom_name(value):
         return name
     if "?" in fields[-1] or fields[-1].startswith("("):
         return "{} //".format(" ".join(fields[:-1]))
-    if fields[-1] == "?":
-        return "{} //".format(" ".join(fields[:-1]))
     return "{} /{}/".format(" ".join(fields[:-1]), fields[-1])
 
 
@@ -130,7 +128,10 @@ def parse_lookup_file(path, trim_location_control=False):
         # BKLOCATE occasionally stores a printable control byte immediately
         # before the NUL terminator.  It must not become part of the place
         # name; the source-description table does not use this repair.
-        if trim_location_control and end < len(data) and data[end] == 0:
+        # Only punctuation has been observed in that position, so a letter
+        # or digit there is kept rather than risk truncating a real name.
+        if trim_location_control and end < len(data) and data[end] == 0 \
+                and field and not chr(field[-1]).isalnum():
             field = field[:-1]
         text = field.decode("cp437", "replace").rstrip()
         if trim_location_control and text.endswith("*") \
@@ -302,45 +303,83 @@ def emit(line=""):
     print(line)
 
 
-def note_chunks(text, prefix_length):
-    """Split note text so the complete GEDCOM line stays within 255 chars."""
-    text = str(text)
-    width = 255 - prefix_length
-    if width < 1:
-        raise ValueError("GEDCOM note prefix is too long")
-    return [text[offset:offset + width]
-            for offset in range(0, max(1, len(text)), width)]
+def note_chunks(text, first_prefix_length, rest_prefix_length):
+    """Split note text so each complete GEDCOM line stays within 255 chars.
+
+    BK5 pads note fields with spaces, so trailing padding is dropped.  GEDCOM
+    5.5.1 requires CONC splits to fall between two non-space characters,
+    because readers may trim leading or trailing line whitespace; a split
+    point is therefore moved back until both neighbours are non-space.
+    """
+    text = str(text).rstrip()
+    chunks = []
+    prefix_length = first_prefix_length
+    while True:
+        width = 255 - prefix_length
+        if width < 2:
+            raise ValueError("GEDCOM note prefix is too long")
+        if len(text) <= width:
+            chunks.append(text)
+            return chunks
+        split = width
+        while split > 1 and (text[split - 1] == " " or text[split] == " "):
+            split -= 1
+        if split == 1:
+            split = width
+        chunks.append(text[:split])
+        text = text[split:]
+        prefix_length = rest_prefix_length
+
+
+BK5_NOTE_LINE_WIDTH = 78
+BK5_NOTE_LINES = 7
+
+
+def format_bk5_note(note):
+    """Restore the line layout of a fixed-width BK5 person note.
+
+    Every observed BK5 note field is 554 bytes: seven 78-column text lines
+    followed by an eight-digit YYYYMMDD stamp.  Text is padded with spaces
+    to each line boundary rather than wrapped mid-word, so the lines become
+    GEDCOM continuation lines.  The stamp is kept, labelled but uninterpreted.
+    Notes that do not match this layout are returned unchanged.
+    """
+    text_length = BK5_NOTE_LINE_WIDTH * BK5_NOTE_LINES
+    stamp = note[text_length:]
+    if len(note) != text_length + 8 or not re.fullmatch(r"\d{8}", stamp):
+        return note
+    lines = [note[offset:offset + BK5_NOTE_LINE_WIDTH].rstrip()
+             for offset in range(0, text_length, BK5_NOTE_LINE_WIDTH)]
+    while lines and not lines[-1]:
+        lines.pop()
+    lines.append("[BK5 note stamp {}]".format(stamp))
+    return "\n".join(lines)
 
 
 def emit_note(text, level=1):
     """Emit one NOTE and CONC records without exceeding GEDCOM line limits."""
     lines = str(text).splitlines() or [""]
-    emit_note_line = "{} NOTE ".format(level)
-    emit(emit_note_line + note_chunks(lines[0], len(emit_note_line))[0])
-    for chunk in note_chunks(lines[0], len("{} CONC ".format(level + 1)))[1:]:
-        emit("{} CONC {}".format(level + 1, chunk))
-    for line in lines[1:]:
-        cont_prefix = "{} CONT ".format(level + 1)
-        chunks = note_chunks(line, len(cont_prefix))
-        emit(cont_prefix + chunks[0])
+    note_prefix = "{} NOTE ".format(level)
+    cont_prefix = "{} CONT ".format(level + 1)
+    conc_prefix = "{} CONC ".format(level + 1)
+    for index, line in enumerate(lines):
+        prefix = note_prefix if index == 0 else cont_prefix
+        chunks = note_chunks(line, len(prefix), len(conc_prefix))
+        emit(prefix + chunks[0])
         for chunk in chunks[1:]:
-            emit("{} CONC {}".format(level + 1, chunk))
+            emit(conc_prefix + chunk)
 
 
 def emit_note_record(xref, lines):
     """Emit an independent NOTE record with valid text and continuations."""
-    first_prefix = "0 @{}@ NOTE ".format(xref)
-    first_line = str(lines[0]) if lines else ""
-    chunks = note_chunks(first_line, len(first_prefix))
-    emit(first_prefix + chunks[0])
-    for chunk in chunks[1:]:
-        emit("1 CONC {}".format(chunk))
-    for line in lines[1:]:
-        cont_prefix = "1 CONT "
-        chunks = note_chunks(line, len(cont_prefix))
-        emit(cont_prefix + chunks[0])
+    lines = [str(line) for line in lines] or [""]
+    note_prefix = "0 @{}@ NOTE ".format(xref)
+    for index, line in enumerate(lines):
+        prefix = note_prefix if index == 0 else "1 CONT "
+        chunks = note_chunks(line, len(prefix), len("1 CONC "))
+        emit(prefix + chunks[0])
         for chunk in chunks[1:]:
-            emit("1 CONC {}".format(chunk))
+            emit("1 CONC " + chunk)
 
 
 def main():
@@ -415,7 +454,7 @@ def main():
         if person["occupation"]:
             emit("1 OCCU {}".format(person["occupation"]))
         for note in person["notes"]:
-            emit_note("BK5: {}".format(note))
+            emit_note("BK5: {}".format(format_bk5_note(note)))
         for slot, location_id in enumerate(person["location_refs"], 1):
             if not location_id:
                 continue
