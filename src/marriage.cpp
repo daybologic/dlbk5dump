@@ -41,8 +41,9 @@ const std::size_t DATA_START = 0xc00U;
  *         slot: 18 characters of citation detail then a 2-character
  *         quality code (0-3).  A code only appears with its source.
  *   110   three source numbers (BKSOURCE.DT5)
- *   122   11-character status text, NUL or space padded, for example
- *         "Y", " D", "YS1991"; its meaning is not yet proven
+ *   122   status, NUL or space padded: BK5's CHANGES.DOC lists the fields
+ *         "Marr. ceremony Y/N", "Divorced/Annulled/Separated" and "End
+ *         year", stored as 1, 1 and 4 characters ("YS1991", " D")
  *   133   25 child slots of four bytes; slot 9 (offset 165) is zero in
  *         every record, and children continue after it in the five
  *         families with more than eight children

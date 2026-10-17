@@ -51,9 +51,10 @@ families agreed exactly with the links decoded independently from
 `BKPERSON.DT5` before the family table was used. Family membership in the
 GEDCOM export comes from these records. Person-record family references that
 the family table does not confirm must be kept as audit notes, not dropped
-or used to create links. The status field's meaning is unproven; export it
-only as a raw note. Never assign a family by date, name similarity, or
-record order.
+or used to create links. The status field holds BK5's documented
+"Marr. ceremony Y/N", "Divorced/Annulled/Separated" and "End year" fields
+(`BK5/CHANGES.DOC`); end codes other than D, A and S are kept as notes.
+Never assign a family by date, name similarity, or record order.
 
 It also preserves all five decoded location references from
 `BK5/BKLOCATE.DT5` and source references from `BK5/BKSOURCE.DT5` as

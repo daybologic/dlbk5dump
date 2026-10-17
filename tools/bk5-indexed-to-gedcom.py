@@ -251,6 +251,46 @@ def parse_families(text):
     return families
 
 
+FAMILY_END_EVENTS = {"D": "DIV", "A": "ANUL"}
+
+
+def split_family_status(status):
+    """Split the BKMARR status field into its three BK5 fields.
+
+    BK5's CHANGES.DOC lists the version 5 family fields "Marr. ceremony
+    Y/N", "Divorced/Annulled/Separated" and "End year".  They occupy one
+    character, one character and four characters, in that order.
+    """
+    status = status.ljust(6)
+    end_year = status[2:6].strip()
+    return status[0].strip(), status[1].strip(), end_year
+
+
+def emit_family_status(ceremony, end_code, end_year):
+    """Emit how a BK5 marriage ended, or record what cannot be mapped."""
+    if ceremony == "N":
+        emit_note("BK5 marriage ceremony field: N (no ceremony).")
+    if end_code in FAMILY_END_EVENTS:
+        tag = FAMILY_END_EVENTS[end_code]
+        if end_year:
+            emit("1 {}".format(tag))
+            emit("2 DATE {}".format(gedcom_date(end_year)))
+        else:
+            emit("1 {} Y".format(tag))
+    elif end_code == "S":
+        emit("1 EVEN")
+        emit("2 TYPE Separated")
+        if end_year:
+            emit("2 DATE {}".format(gedcom_date(end_year)))
+    elif end_code:
+        emit_note("BK5 marriage end code {!r} is not documented in "
+                  "CHANGES.DOC (Divorced/Annulled/Separated); end year: "
+                  "{}".format(end_code, end_year or "none"))
+    elif end_year:
+        emit_note("BK5 marriage end year: {} (no reason recorded).".format(
+            end_year))
+
+
 def family_tag(family_id):
     return "@F{:x}@".format(family_id)
 
@@ -530,6 +570,7 @@ def main():
             emit("1 CHIL @I{}@".format(person_id))
         date, second_date = family["dates"]
         location_id, second_location_id = family["location_refs"]
+        ceremony, end_code, end_year = split_family_status(family["status"])
         if date or location_id:
             emit("1 MARR")
             if date:
@@ -537,6 +578,9 @@ def main():
             if location_id:
                 emit("2 PLAC {}".format(
                     locations.get(location_id, "[not decoded]")))
+        elif ceremony == "Y":
+            emit("1 MARR Y")
+        emit_family_status(ceremony, end_code, end_year)
         if location_id:
             emit_note("BK5 family location slot 1 ({}): {}".format(
                 location_id, locations.get(location_id, "[not decoded]")))
@@ -562,8 +606,8 @@ def main():
                 slot + 1, source_id,
                 sources.get(source_id, "[not decoded]")))
         if family["status"]:
-            emit_note("BK5 family status field (meaning unproven): {}".format(
-                family["status"]))
+            emit_note("BK5 family status field (ceremony, end code, end "
+                      "year): {}".format(family["status"]))
         emit_note("BK5 family record address 0x{}; stamp {}".format(
             family["address"], family["stamp"]))
 
