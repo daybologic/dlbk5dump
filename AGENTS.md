@@ -34,6 +34,9 @@ Run `./tools/bk5-mail.py` to inspect the unassigned address-book text in
 `BKMAIL.DT5`; do not attach it to a person by name similarity alone.
 Run `./tools/bk5-options.py` to compare `BKOPTION.DT5` with its backup;
 configuration differences must not be interpreted as genealogy records.
+Run `./tools/gedcom-check.py indexed.ged`, `./tools/gedcom-roles.py
+indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
+checks of GEDCOM structure, family-role plausibility and place events.
 
 Marriage IDs may be recovered only when both spouse records independently
 share exactly one family reference. Ambiguous marriage scans must remain
