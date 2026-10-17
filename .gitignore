@@ -3,3 +3,6 @@ BK5/
 src/*.o
 src/*.d
 CORRECTIONS.md
+*.png
+*.dot
+*.ged
