@@ -25,6 +25,7 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 make gedcom > indexed.ged
 make gedcom-file
+make gedcom-clean-file          # indexed-clean.ged, without extraction notes
 make audit
 ```
 

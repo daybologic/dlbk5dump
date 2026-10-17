@@ -4,6 +4,11 @@
 This is intentionally an intermediate export.  It does not discard the
 diagnostic source address or unknown date slots, and it states that raw-only
 records still need to be merged before the export can be considered complete.
+
+With --clean, notes that only document the extraction are left out: record
+addresses, raw-page copies, slot notes that repeat a PLAC or SOUR already on
+an event, and the header's file inventory (including the BKMAIL address
+book).  Everything with genealogical content is kept either way.
 """
 
 import re
@@ -330,8 +335,12 @@ def emit_citation(slot, source_id, detail, quality, sources, label="BK5",
             quality not in ("0", "1", "2", "3"):
         emit_note("{} citation slot {}: quality code {!r} is outside "
                   "GEDCOM's 0-3 range".format(label, slot, quality))
-    emit_note("{} source slot {} ({}): {}".format(
-        label, slot, source_id, sources.get(source_id, "[not decoded]")))
+    if source_id in sources:
+        emit_audit_note("{} source slot {} ({}): {}".format(
+            label, slot, source_id, sources[source_id]))
+    else:
+        emit_note("{} source slot {} ({}): [not decoded]".format(
+            label, slot, source_id))
 
 
 def family_tag(family_id):
@@ -370,6 +379,9 @@ def emit_family_links(person_id, refs, links):
 DATE_SLOTS = ("0x111", "0x120", "0x12f", "0x13e", "0x14d")
 DATE_TAGS = ("BIRT", "BAPM", "DEAT", "BURI", None)
 
+
+# Set from the command line: leave out notes that only document extraction.
+CLEAN = False
 
 SUBMITTER_XREF = "@U1@"
 SUBMITTER_NAME = "dlbk5dump BK5 extraction"
@@ -430,6 +442,12 @@ def format_bk5_note(note):
         lines.pop()
     lines.append("[BK5 note stamp {}]".format(stamp))
     return "\n".join(lines)
+
+
+def emit_audit_note(text, level=1):
+    """Emit a note that only documents the extraction (omitted by --clean)."""
+    if not CLEAN:
+        emit_note(text, level)
 
 
 def emit_note(text, level=1):
@@ -506,7 +524,12 @@ def main():
         "BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;",
         "slot 5 remains an audit note because it is the other-date field.",
     ])
-    emit_note("\n".join(header_notes))
+    if CLEAN:
+        emit_note("Exported from Brother's Keeper 5 data by dlbk5dump. "
+                  "Extraction notes are omitted; run without --clean for "
+                  "the audit export.")
+    else:
+        emit_note("\n".join(header_notes))
     emit("1 CHAR UTF-8")
     emit("0 {} SUBM".format(SUBMITTER_XREF))
     emit("1 NAME {}".format(SUBMITTER_NAME))
@@ -534,8 +557,14 @@ def main():
             if not location_id:
                 continue
             description = locations.get(location_id, "[not decoded]")
-            emit_note("BK5 location slot {} ({}): {}".format(
-                slot, location_id, description))
+            text = "BK5 location slot {} ({}): {}".format(
+                slot, location_id, description)
+            # Slots 1-4 are repeated as the PLAC of their event; slot 5
+            # ("other") has no event, so its place exists only here.
+            if slot <= 4 and location_id in locations:
+                emit_audit_note(text)
+            else:
+                emit_note(text)
         # BK5 keeps one citation per date/location slot (CHANGES.DOC:
         # "3 full lines for each date/location"), so source slot n cites
         # event slot n.  A citation whose event is not exported stays on
@@ -581,26 +610,28 @@ def main():
                     offset, gedcom_date(date)))
         refs = person["families"]
         emit_family_links(person_id, refs, links)
-        emit_note("BK5 fixed record address 0x{}; expanded length {}".format(
-            person["address"], person["length"]))
+        emit_audit_note("BK5 fixed record address 0x{}; expanded length "
+                        "{}".format(person["address"], person["length"]))
         if person_id in raw_by_id:
+            # A stale raw-page copy of this decoded person: every raw date
+            # repeats one of the person's exported dates.
             raw = raw_by_id[person_id]
-            emit_note("BK5 raw record offset {}".format(raw["offset"]))
-            emit_note("BK5 raw name: {}".format(raw["raw_name"]))
+            emit_audit_note("BK5 raw record offset {}".format(raw["offset"]))
+            emit_audit_note("BK5 raw name: {}".format(raw["raw_name"]))
             for date_offset, date in raw["dates"]:
-                emit_note("BK5 raw date at {}: {}".format(
+                emit_audit_note("BK5 raw date at {}: {}".format(
                     date_offset, gedcom_date(date)))
             extra_families = [family_id for family_id in raw["families"]
                               if family_id and family_id not in refs]
             if extra_families:
-                emit_note("BK5 raw family references not present in fixed record: {}".format(
+                emit_audit_note("BK5 raw family references not present in fixed record: {}".format(
                     ", ".join(family_tag(value)
                               for value in extra_families)))
 
     for person in raw_unmerged:
         emit("0 @I{}@ INDI".format(person["xref"]))
         emit("1 NAME {}".format(gedcom_name(raw_display_name(person))))
-        emit_note("BK5 raw name: {}".format(person["raw_name"]))
+        emit_audit_note("BK5 raw name: {}".format(person["raw_name"]))
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
         for date_offset, date in person["dates"]:
@@ -614,7 +645,8 @@ def main():
                 if family_id:
                     emit_note("BK5 raw family reference {} (role unresolved)".format(
                         family_tag(family_id)))
-        emit_note("BK5 raw person record offset {}".format(person["offset"]))
+        emit_audit_note("BK5 raw person record offset {}".format(
+            person["offset"]))
 
     for person_id in placeholders:
         emit("0 @I{}@ INDI".format(person_id))
@@ -645,7 +677,7 @@ def main():
             emit("1 MARR Y")
         emit_family_status(ceremony, end_code, end_year)
         if location_id:
-            emit_note("BK5 family location slot 1 ({}): {}".format(
+            emit_audit_note("BK5 family location slot 1 ({}): {}".format(
                 location_id, locations.get(location_id, "[not decoded]")))
         if second_date or second_location_id:
             emit_note("BK5 family second date/location slot: {} {}".format(
@@ -656,20 +688,26 @@ def main():
                           family["source_quality"][slot - 1], sources,
                           label="BK5 family")
         if family["status"]:
-            emit_note("BK5 family status field (ceremony, end code, end "
-                      "year): {}".format(family["status"]))
-        emit_note("BK5 family record address 0x{}; stamp {}".format(
+            emit_audit_note("BK5 family status field (ceremony, end code, "
+                            "end year): {}".format(family["status"]))
+        emit_audit_note("BK5 family record address 0x{}; stamp {}".format(
             family["address"], family["stamp"]))
 
-    emit_note_record("NUNRESOLVED", [
-        "{} indexed entries were not decoded or were not named.".format(
-            len(unresolved)),
-        *unresolved,
-    ])
+    if not CLEAN:
+        emit_note_record("NUNRESOLVED", [
+            "{} indexed entries were not decoded or were not named.".format(
+                len(unresolved)),
+            *unresolved,
+        ])
     emit("0 TRLR")
 
 
 if __name__ == "__main__":
+    arguments = sys.argv[1:]
+    if arguments not in ([], ["--clean"]):
+        print("usage: bk5-indexed-to-gedcom.py [--clean]", file=sys.stderr)
+        sys.exit(2)
+    CLEAN = arguments == ["--clean"]
     try:
         main()
     except (OSError, subprocess.CalledProcessError) as error:

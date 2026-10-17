@@ -5,7 +5,7 @@ TARGET  := dlbk5dump
 SOURCES := src/btrieve.cpp src/dlbk5dump.cpp src/lookup.cpp src/marriage.cpp src/person.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-.PHONY: all clean gedcom gedcom-file audit
+.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit
 
 all: $(TARGET)
 
@@ -14,6 +14,9 @@ gedcom: $(TARGET)
 
 gedcom-file: $(TARGET)
 	@./tools/bk5-indexed-to-gedcom.py > indexed.ged
+
+gedcom-clean-file: $(TARGET)
+	@./tools/bk5-indexed-to-gedcom.py --clean > indexed-clean.ged
 
 audit: $(TARGET)
 	@./tools/bk5-indexed-to-gedcom.py | ./tools/bk5-audit.py
