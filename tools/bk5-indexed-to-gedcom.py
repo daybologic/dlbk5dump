@@ -328,6 +328,10 @@ DATE_SLOTS = ("0x111", "0x120", "0x12f", "0x13e", "0x14d")
 DATE_TAGS = ("BIRT", "BAPM", "DEAT", "BURI", None)
 
 
+SUBMITTER_XREF = "@U1@"
+SUBMITTER_NAME = "dlbk5dump BK5 extraction"
+
+
 def emit(line=""):
     print(line)
 
@@ -434,6 +438,8 @@ def main():
 
     emit("0 HEAD")
     emit("1 SOUR dlbk5dump")
+    # GEDCOM 5.5.1 requires the header to name a submitter record.
+    emit("1 SUBM {}".format(SUBMITTER_XREF))
     emit("1 GEDC")
     emit("2 VERS 5.5.1")
     emit("2 FORM LINEAGE-LINKED")
@@ -459,6 +465,8 @@ def main():
     ])
     emit_note("\n".join(header_notes))
     emit("1 CHAR UTF-8")
+    emit("0 {} SUBM".format(SUBMITTER_XREF))
+    emit("1 NAME {}".format(SUBMITTER_NAME))
 
     for source_id, lines in sorted(source_lines.items()):
         emit("0 @S{}@ SOUR".format(source_id))

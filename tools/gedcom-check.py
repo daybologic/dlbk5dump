@@ -18,6 +18,9 @@ for i,l in enumerate(L,1):
     else: cur.append((lv,m[2],m[3],m[4] or '',i))
 print('bad lines',len(bad));[print(' ',b) for b in bad[:20]]
 dups=[k for k,v in recs.items() if len(v)>1 and k.startswith('@')];print('dup xrefs',dups[:10])
+head=recs.get('HEAD',[[]])[0]
+subm=[x[3] for x in head if x[0]==1 and x[2]=='SUBM']
+print('header SUBM',subm,'ok' if subm and subm[0] in recs and recs[subm[0]][0][0][2]=='SUBM' else 'MISSING (required by 5.5.1)')
 types=collections.Counter(r[0][2] for r in order);print(types)
 ind={r[0][1]:r for r in order if r[0][2]=='INDI'};fam={r[0][1]:r for r in order if r[0][2]=='FAM'}
 def tags(r,t,lv=1):return [x[3] for x in r if x[0]==lv and x[2]==t]
