@@ -31,6 +31,12 @@ MARRIAGE_HEADER_RE = re.compile(
 MARRIAGE_COMPACT_RE = re.compile(
     r'compact_ref=0x([0-9a-f]+)'
 )
+def gedcom_date(value):
+    """Normalize the month in a BK5 date without changing source files."""
+    fields = value.strip().split()
+    if len(fields) >= 3:
+        fields[1] = fields[1][:3].upper()
+    return " ".join(fields)
 
 
 def run_dump(*args):
@@ -294,7 +300,7 @@ def main():
         len(unresolved_marriages)))
     for spouse_1, spouse_2, date, common in unresolved_marriages:
         emit("1 CONT Unlinked BKMARR date={} spouse_ref_1={} spouse_ref_2={} common_family_refs={}".format(
-            date, spouse_1, spouse_2,
+            gedcom_date(date), spouse_1, spouse_2,
             ",".join("0x{:x}".format(value) for value in common) or "none"))
     emit("1 NOTE BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;")
     emit("1 NOTE slot 5 remains an audit note because it is the other-date field.")
@@ -333,10 +339,10 @@ def main():
             tag = DATE_TAGS[slot]
             if tag is None:
                 emit("1 NOTE BK5 date slot {} ({}): {}".format(
-                    slot + 1, offset, date))
+                    slot + 1, offset, gedcom_date(date)))
                 continue
             emit("1 {}".format(tag))
-            emit("2 DATE {}".format(date.strip()))
+            emit("2 DATE {}".format(gedcom_date(date)))
             if slot < len(person["location_refs"]):
                 location_id = person["location_refs"][slot]
                 if location_id:
@@ -344,7 +350,8 @@ def main():
                         locations.get(location_id, "[not decoded]")))
         for offset, date in sorted(person["dates"].items()):
             if offset not in DATE_SLOTS:
-                emit("1 NOTE BK5 date at {}: {}".format(offset, date))
+                emit("1 NOTE BK5 date at {}: {}".format(
+                    offset, gedcom_date(date)))
         refs = person["families"]
         roles = family_roles(person_id, refs, marriages)
         for family_id, role in roles:
@@ -365,7 +372,7 @@ def main():
             emit("1 NOTE BK5 raw name: {}".format(raw["raw_name"]))
             for date_offset, date in raw["dates"]:
                 emit("1 NOTE BK5 raw date at {}: {}".format(
-                    date_offset, date))
+                    date_offset, gedcom_date(date)))
             extra_families = [family_id for family_id in raw["families"]
                               if family_id and family_id not in refs]
             if extra_families:
@@ -380,7 +387,8 @@ def main():
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
         for date_offset, date in person["dates"]:
-            emit("1 NOTE BK5 raw date at {}: {}".format(date_offset, date))
+            emit("1 NOTE BK5 raw date at {}: {}".format(
+                date_offset, gedcom_date(date)))
         refs = person["families"]
         if person["person_id"] is not None and refs:
             for family_id, role in family_roles(person["person_id"],
@@ -438,7 +446,8 @@ def main():
             emit("1 CHIL @I{}@".format(person_id))
         if family_id in marriages:
             emit("1 MARR")
-            emit("2 DATE {}".format(marriages[family_id]["date"]))
+            emit("2 DATE {}".format(
+                gedcom_date(marriages[family_id]["date"])))
             if marriages[family_id]["inferred_family_id"]:
                 emit("1 NOTE {}".format(marriages[family_id]["inference"]))
             known_spouses = {person_id for person_id, _ in spouses}
