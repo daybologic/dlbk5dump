@@ -56,7 +56,7 @@ odd=[(p,n) for p,r in ind.items() for n in tags(r,'NAME') if re.search(r'[^A-Za-
 famc2=[p for p,r in ind.items() if len(tags(r,'FAMC'))>1];print('INDI with >1 FAMC',len(famc2),famc2[:10])
 # dates
 months='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split()
-dre=re.compile(r'^((ABT|BEF|AFT|EST|CAL) )?((\d{1,2} )?('+'|'.join(months)+r') )?\d{3,4}(/\d\d)?$')
+dre=re.compile(r'^(((ABT|BEF|AFT|EST|CAL) )?((\d{1,2} )?('+'|'.join(months)+r') )?\d{3,4}(/\d\d)?|\([^()]*\))$')
 baddate=[(x[4],x[3]) for r in order for x in r if x[2]=='DATE' and not dre.match(x[3])]
 print('non-standard DATE values',len(baddate),baddate[:25])
 ev=collections.Counter(x[2] for r in order for x in r if x[0]==1);print(ev)

@@ -23,20 +23,33 @@ RAW_PERSON_RE = re.compile(
     r'leading_numeric=0x[0-9a-f]+ '
     r'raw_name="(.*?)" sex=(.) families=([^ ]*) dates=(.*)$'
 )
-MARRIAGE_RE = re.compile(r'^MARRIAGE_RECORD .* date="([^"]*)"$')
-MARRIAGE_HEADER_RE = re.compile(
-    r'spouse_ref_1=0x([0-9a-f]+) spouse_ref_2=0x([0-9a-f]+)'
-    r'(?: family_id=0x([0-9a-f]+))?'
+FAMILY_RE = re.compile(
+    r'^FAMILY_RECORD id=(\d+) address=0x([0-9a-f]+) indexed=(yes|no) '
+    r'husband=(\d+) wife=(\d+) date_1="(.*?)" date_2="(.*?)" '
+    r'location_refs=(\d+),(\d+) source_refs=(\d+),(\d+),(\d+) '
+    r'source_details="(.*?)","(.*?)","(.*?)" '
+    r'source_quality="(.*?)","(.*?)","(.*?)" status="(.*?)" '
+    r'children=([\d,]*) stamp=(\S*) flag="(.*?)"$'
 )
-MARRIAGE_COMPACT_RE = re.compile(
-    r'compact_ref=0x([0-9a-f]+)'
-)
+MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+          "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+GEDCOM_DATE_RE = re.compile(
+    r'^(?:\d{1,2} )?(?:(?:' + "|".join(MONTHS) + r') )?\d{3,4}$')
+
+
 def gedcom_date(value):
-    """Normalize the month in a BK5 date without changing source files."""
+    """Normalize the month in a BK5 date without changing source files.
+
+    Dates GEDCOM cannot express exactly, such as BK5's uncertain years
+    ("195?"), are kept verbatim as a GEDCOM date phrase in parentheses.
+    """
     fields = value.strip().split()
-    if len(fields) >= 3:
-        fields[1] = fields[1][:3].upper()
-    return " ".join(fields)
+    if len(fields) >= 2 and fields[-2][:3].upper() in MONTHS:
+        fields[-2] = fields[-2][:3].upper()
+    date = " ".join(fields)
+    if date and not GEDCOM_DATE_RE.match(date):
+        return "({})".format(date)
+    return date
 
 
 def gedcom_name(value):
@@ -215,84 +228,62 @@ def raw_display_name(person):
     return raw_name
 
 
-def parse_marriages(text, people):
-    result = {}
-    unresolved = []
-    pending_date = None
+def parse_families(text):
+    """Read the BKMARR.DT5 family records decoded by --dump-families."""
+    families = {}
     for line in text.splitlines():
-        match = MARRIAGE_RE.match(line)
-        if match:
-            pending_date = match.group(1)
+        match = FAMILY_RE.match(line)
+        if not match:
             continue
-        match = MARRIAGE_COMPACT_RE.search(line)
-        if match and pending_date is not None:
-            compact_ref = int(match.group(1), 16)
-            refs = people.get(compact_ref, {}).get("families", [])
-            family_ids = [refs[1]] if len(refs) >= 2 and refs[1] else []
-            if len(family_ids) == 1 and family_ids[0] not in result:
-                result[family_ids[0]] = {
-                    "date": pending_date,
-                    "spouses": [compact_ref],
-                    "layout_incomplete": True,
-                    "inferred_family_id": True,
-                    "inference": "Family ID recovered from compact BKMARR key and the person's FAMS reference; spouse pair remains layout-incomplete.",
-                }
-            else:
-                unresolved.append((compact_ref, 0, pending_date, []))
-            pending_date = None
-            continue
-        match = MARRIAGE_HEADER_RE.search(line)
-        if match and pending_date is not None:
-            spouse_1, spouse_2, family_id = match.groups()
-            spouse_1 = int(spouse_1, 16)
-            spouse_2 = int(spouse_2, 16)
-            inferred = False
-            if family_id is None:
-                refs_1 = {value for value in people.get(spouse_1, {}).get("families", [])
-                          if value}
-                refs_2 = {value for value in people.get(spouse_2, {}).get("families", [])
-                          if value}
-                common = refs_1 & refs_2
-                if len(common) == 1:
-                    family_id = next(iter(common))
-                    inferred = True
-                else:
-                    unresolved.append((spouse_1, spouse_2, pending_date,
-                                       sorted(common)))
-                    pending_date = None
-                    continue
-            if not inferred:
-                family_id = int(family_id, 16)
-            result[family_id] = {
-                "date": pending_date,
-                "spouses": [spouse_1, spouse_2],
-                "layout_incomplete": False,
-                "inferred_family_id": inferred,
-                "inference": "Family ID recovered from the common reference in both spouse records." if inferred else "",
-            }
-            pending_date = None
-    return result, unresolved
+        values = match.groups()
+        families[int(values[0])] = {
+            "address": values[1],
+            "husband": int(values[3]),
+            "wife": int(values[4]),
+            "dates": [values[5], values[6]],
+            "location_refs": [int(values[7]), int(values[8])],
+            "source_refs": [int(value) for value in values[9:12]],
+            "source_details": list(values[12:15]),
+            "source_quality": list(values[15:18]),
+            "status": values[18],
+            "children": [int(value) for value in values[19].split(',')
+                         if value],
+            "stamp": values[20],
+        }
+    return families
 
 
 def family_tag(family_id):
     return "@F{:x}@".format(family_id)
 
 
-def family_roles(person_id, refs, marriages):
-    """Assign family roles using decoded marriage spouses where available."""
-    result = []
-    for index, family_id in enumerate(refs):
-        if not family_id:
-            continue
-        marriage = marriages.get(family_id)
-        if marriage is not None:
-            role = ("FAMS" if person_id in marriage["spouses"]
-                    or (marriage.get("layout_incomplete") and index == 1)
-                    else "FAMC")
-        else:
-            role = "FAMC" if index == 0 else "FAMS"
-        result.append((family_id, role))
-    return result
+def family_links(families):
+    """Map each person number to its (family, FAMC|FAMS) memberships."""
+    links = {}
+    for family_id, family in sorted(families.items()):
+        for person_id in (family["husband"], family["wife"]):
+            if person_id:
+                links.setdefault(person_id, []).append((family_id, "FAMS"))
+        for person_id in family["children"]:
+            links.setdefault(person_id, []).append((family_id, "FAMC"))
+    return links
+
+
+def emit_family_links(person_id, refs, links):
+    """Emit FAMC/FAMS from BKMARR, noting person references it lacks."""
+    order = {value: index for index, value in enumerate(refs) if value}
+    memberships = sorted(links.get(person_id, []),
+                         key=lambda item: (item[1] != "FAMC",
+                                           order.get(item[0], len(order)),
+                                           item[0]))
+    for family_id, role in memberships:
+        emit("1 {} {}".format(role, family_tag(family_id)))
+    confirmed = {family_id for family_id, _ in memberships}
+    unconfirmed = [value for value in refs if value and value not in confirmed]
+    if unconfirmed:
+        emit_note("BK5 person family references not listed in BKMARR.DT5: "
+                  "{}".format(", ".join(family_tag(value)
+                                        for value in unconfirmed)))
 
 
 DATE_SLOTS = ("0x111", "0x120", "0x12f", "0x13e", "0x14d")
@@ -390,22 +381,17 @@ def main():
     altkeys = parse_altkeys("BK5/ALTKEYS.DT5")
     mail_text = parse_printable_runs("BK5/BKMAIL.DT5")
     raw_people = parse_raw_people(run_dump("--dump-records"))
-    marriages, unresolved_marriages = parse_marriages(
-        run_dump("--dump-marriages"), people)
+    families = parse_families(run_dump("--dump-families"))
+    links = family_links(families)
     raw_by_id = {person["person_id"]: person for person in raw_people
                  if person["person_id"] is not None}
     raw_unmerged = [person for person in raw_people
                     if person["person_id"] is None
                     or person["person_id"] not in people]
-    placeholders = set()
-    marriage_families_by_person = {}
-    for marriage in marriages.values():
-        for person_id in marriage["spouses"]:
-            marriage_families_by_person.setdefault(person_id, []).append(
-                next(family_id for family_id, value in marriages.items()
-                     if value is marriage))
-            if person_id not in people and person_id not in raw_by_id:
-                placeholders.add(person_id)
+    raw_unmerged_ids = {person["person_id"] for person in raw_unmerged}
+    placeholders = sorted(person_id for person_id in links
+                          if person_id not in people
+                          and person_id not in raw_unmerged_ids)
 
     emit("0 HEAD")
     emit("1 SOUR dlbk5dump")
@@ -415,7 +401,10 @@ def main():
     header_notes = [
         "This is an intermediate export of decoded BK5 fixed records.",
         "Raw-only and unresolved records require a later reconciliation pass.",
-        "Family reference order is preserved from BKPERSON.DT5.",
+        "Families, spouses, children and marriage details come from the",
+        "{} BKMARR.DT5 family records; person-record family references".format(
+            len(families)),
+        "that BKMARR.DT5 does not confirm are kept as notes.",
         "{} non-empty ALTKEYS.DT5 slots are preserved without a person link.".format(
             len(altkeys)),
     ]
@@ -425,13 +414,6 @@ def main():
         len(mail_text)))
     for offset, text in mail_text:
         header_notes.append("BKMAIL offset 0x{:x}: {}".format(offset, text))
-    header_notes.append(
-        "{} marriage records lacked an unambiguous family ID and were not linked.".format(
-            len(unresolved_marriages)))
-    for spouse_1, spouse_2, date, common in unresolved_marriages:
-        header_notes.append("Unlinked BKMARR date={} spouse_ref_1={} spouse_ref_2={} common_family_refs={}".format(
-            gedcom_date(date), spouse_1, spouse_2,
-            ",".join("0x{:x}".format(value) for value in common) or "none"))
     header_notes.extend([
         "BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;",
         "slot 5 remains an audit note because it is the other-date field.",
@@ -493,17 +475,7 @@ def main():
                 emit_note("BK5 date at {}: {}".format(
                     offset, gedcom_date(date)))
         refs = person["families"]
-        roles = family_roles(person_id, refs, marriages)
-        for family_id, role in roles:
-            emit("1 {} {}".format(role, family_tag(family_id)))
-        if len(roles) < len([value for value in refs if value]):
-            emit_note("Additional BK5 family references: {}".format(
-                ", ".join(family_tag(value) for value in refs
-                          if value and family_tag(value) not in
-                          {family_tag(family_id) for family_id, _ in roles})))
-        for family_id in marriage_families_by_person.get(person_id, []):
-            if len(refs) < 2 or refs[1] != family_id:
-                emit("1 FAMS {}".format(family_tag(family_id)))
+        emit_family_links(person_id, refs, links)
         emit_note("BK5 fixed record address 0x{}; expanded length {}".format(
             person["address"], person["length"]))
         if person_id in raw_by_id:
@@ -530,14 +502,8 @@ def main():
             emit_note("BK5 raw date at {}: {}".format(
                 date_offset, gedcom_date(date)))
         refs = person["families"]
-        if person["person_id"] is not None and refs:
-            for family_id, role in family_roles(person["person_id"],
-                                                 refs, marriages):
-                emit("1 {} {}".format(role, family_tag(family_id)))
-            for family_id in refs[2:]:
-                if family_id:
-                    emit_note("Additional BK5 raw family reference {}".format(
-                        family_tag(family_id)))
+        if person["person_id"] is not None:
+            emit_family_links(person["person_id"], refs, links)
         else:
             for family_id in refs:
                 if family_id:
@@ -545,59 +511,59 @@ def main():
                         family_tag(family_id)))
         emit_note("BK5 raw person record offset {}".format(person["offset"]))
 
-    for person_id in sorted(placeholders):
+    for person_id in placeholders:
         emit("0 @I{}@ INDI".format(person_id))
-        emit_note("Unresolved BK5 marriage spouse reference {}".format(
-            person_id))
+        emit("1 NAME //")
+        emit_family_links(person_id, [], links)
+        emit_note("BK5 person {} is listed in BKMARR.DT5 but its person "
+                  "record has no decoded name.".format(person_id))
 
-    family_ids = set(marriages)
-    for person in people.values():
-        family_ids.update(value for value in person["families"] if value)
-    for person in raw_unmerged:
-        family_ids.update(value for value in person["families"] if value)
-    for family_id in sorted(family_ids):
+    for family_id, family in sorted(families.items()):
         emit("0 {} FAM".format(family_tag(family_id)))
-        spouses = []
-        children = []
-        for person_id, person in sorted(people.items()):
-            refs = person["families"]
-            for reference, role in family_roles(person_id, refs, marriages):
-                if reference != family_id:
-                    continue
-                if role == "FAMS":
-                    spouses.append((person_id, person["sex"]))
-                elif role == "FAMC":
-                    children.append(person_id)
-        for person in raw_unmerged:
-            refs = person["families"]
-            if person["person_id"] is not None:
-                for reference, role in family_roles(person["person_id"],
-                                                     refs, marriages):
-                    if reference != family_id:
-                        continue
-                    if role == "FAMS":
-                        spouses.append((person["person_id"], person["sex"]))
-                    elif role == "FAMC":
-                        children.append(person["person_id"])
-        for person_id, sex in spouses:
-            emit("1 {} @I{}@".format("HUSB" if sex == "M" else "WIFE"
-                                      if sex == "F" else "NOTE", person_id))
-        for person_id in children:
+        if family["husband"]:
+            emit("1 HUSB @I{}@".format(family["husband"]))
+        if family["wife"]:
+            emit("1 WIFE @I{}@".format(family["wife"]))
+        for person_id in family["children"]:
             emit("1 CHIL @I{}@".format(person_id))
-        if family_id in marriages:
+        date, second_date = family["dates"]
+        location_id, second_location_id = family["location_refs"]
+        if date or location_id:
             emit("1 MARR")
-            emit("2 DATE {}".format(
-                gedcom_date(marriages[family_id]["date"])))
-            if marriages[family_id]["inferred_family_id"]:
-                emit_note(marriages[family_id]["inference"])
-            known_spouses = {person_id for person_id, _ in spouses}
-            for index, person_id in enumerate(marriages[family_id]["spouses"]):
-                if person_id in known_spouses:
-                    continue
-                role = "HUSB" if index == 0 else "WIFE"
-                emit("1 {} @I{}@".format(role, person_id))
-        if not spouses or not children:
-            emit_note("Incomplete indexed view; consult raw BK5 records.")
+            if date:
+                emit("2 DATE {}".format(gedcom_date(date)))
+            if location_id:
+                emit("2 PLAC {}".format(
+                    locations.get(location_id, "[not decoded]")))
+        if location_id:
+            emit_note("BK5 family location slot 1 ({}): {}".format(
+                location_id, locations.get(location_id, "[not decoded]")))
+        if second_date or second_location_id:
+            emit_note("BK5 family second date/location slot: {} {}".format(
+                gedcom_date(second_date), second_location_id))
+        for slot, source_id in enumerate(family["source_refs"]):
+            detail = family["source_details"][slot]
+            quality = family["source_quality"][slot]
+            if not source_id:
+                if detail or quality:
+                    emit_note("BK5 family citation slot {} without source: "
+                              "detail={!r} quality={!r}".format(
+                                  slot + 1, detail, quality))
+                continue
+            if source_id in sources:
+                emit("1 SOUR @S{}@".format(source_id))
+                if detail:
+                    emit("2 PAGE {}".format(detail))
+                if quality in ("0", "1", "2", "3"):
+                    emit("2 QUAY {}".format(quality))
+            emit_note("BK5 family source slot {} ({}): {}".format(
+                slot + 1, source_id,
+                sources.get(source_id, "[not decoded]")))
+        if family["status"]:
+            emit_note("BK5 family status field (meaning unproven): {}".format(
+                family["status"]))
+        emit_note("BK5 family record address 0x{}; stamp {}".format(
+            family["address"], family["stamp"]))
 
     emit_note_record("NUNRESOLVED", [
         "{} indexed entries were not decoded or were not named.".format(

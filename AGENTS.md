@@ -17,7 +17,9 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ```sh
 ./dlbk5dump --dump-id-index     # enumerate the key-0 person index
 ./dlbk5dump --dump-id-records   # decode indexed and unindexed fixed records
-./dlbk5dump --dump-marriages    # inspect BKMARR.DT5 marriage records
+./dlbk5dump --dump-marriages    # legacy date-string scan of BKMARR.DT5
+./dlbk5dump --dump-families     # decode all BKMARR.DT5 family records
+./dlbk5dump --trace-family 31   # one family record, fields and raw bytes
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 make gedcom > indexed.ged
 make gedcom-file
@@ -38,10 +40,18 @@ Run `./tools/gedcom-check.py indexed.ged`, `./tools/gedcom-roles.py
 indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.
 
-Marriage IDs may be recovered only when both spouse records independently
-share exactly one family reference. Ambiguous marriage scans must remain
-explicitly unlinked and preserved as audit notes; do not assign a family by
-date, name similarity, or record order.
+`BKMARR.DT5` is the BK5 family table: a compressed Btrieve file keyed by
+family number, holding 167 fixed 242-byte family records (husband, wife,
+marriage date and location, three source citations with detail and quality,
+a status field, and the children). The layout is documented in
+`src/marriage.cpp`; every indexed key matches its expanded record, and 148
+families agreed exactly with the links decoded independently from
+`BKPERSON.DT5` before the family table was used. Family membership in the
+GEDCOM export comes from these records. Person-record family references that
+the family table does not confirm must be kept as audit notes, not dropped
+or used to create links. The status field's meaning is unproven; export it
+only as a raw note. Never assign a family by date, name similarity, or
+record order.
 
 It also preserves all five decoded location references from
 `BK5/BKLOCATE.DT5` and source references from `BK5/BKSOURCE.DT5` as
