@@ -1,11 +1,16 @@
 #include "marriage.hpp"
 
+#include "btrieve.hpp"
+
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -13,6 +18,55 @@ namespace {
 const char *const MARRIAGE_FILE = "BK5/BKMARR.DT5";
 const std::size_t PAGE_SIZE = 1024U;
 const std::size_t DATA_START = 0xc00U;
+
+/* BKMARR.DT5 is a compressed Btrieve file with one key: the four-byte
+ * family number.  Its file control record gives a five-byte physical
+ * record (the compressed-record pointer) and 167 records.  Key-0 leaf
+ * pages (bytes 4..7 = 00 00 2a 00) hold twelve-byte entries: the family
+ * number, a Btrieve address of the five-byte pointer, and a duplicate
+ * link.  Each pointer expands to a 242-byte family record whose first
+ * four bytes repeat the key.  Validated on all 167 records: every indexed
+ * key matches the expanded record, and 148 families agree exactly with
+ * the spouse and child links decoded independently from BKPERSON.DT5.
+ *
+ * Expanded record layout (numbers are big-endian, text space-padded):
+ *     0   family number
+ *     4   husband person number (0 = none)
+ *     8   wife person number (0 = none)
+ *    12   marriage date, 15 characters
+ *    27   second date, 15 characters (blank in every observed record)
+ *    42   marriage location number (BKLOCATE.DT5)
+ *    46   second location number (zero in every observed record)
+ *    50   three 20-character source-citation fields, one per source
+ *         slot: 18 characters of citation detail then a 2-character
+ *         quality code (0-3).  A code only appears with its source.
+ *   110   three source numbers (BKSOURCE.DT5)
+ *   122   11-character status text, NUL or space padded, for example
+ *         "Y", " D", "YS1991"; its meaning is not yet proven
+ *   133   25 child slots of four bytes; slot 9 (offset 165) is zero in
+ *         every record, and children continue after it in the five
+ *         families with more than eight children
+ *   233   eight-digit YYYYMMDD stamp
+ *   241   one trailing flag byte ('*' in every observed record) */
+const std::size_t FAMILY_RECORD_LENGTH = 242U;
+const std::size_t FAMILY_POINTER_LENGTH = 5U;
+const std::size_t FAMILY_HUSBAND = 4U;
+const std::size_t FAMILY_WIFE = 8U;
+const std::size_t FAMILY_DATES = 12U;
+const std::size_t FAMILY_DATE_LENGTH = 15U;
+const std::size_t FAMILY_LOCATIONS = 42U;
+const std::size_t FAMILY_CITATIONS = 50U;
+const std::size_t FAMILY_CITATION_LENGTH = 20U;
+const std::size_t FAMILY_CITATION_DETAIL_LENGTH = 18U;
+const std::size_t FAMILY_SOURCES = 110U;
+const std::size_t FAMILY_SLOTS = 3U;
+const std::size_t FAMILY_STATUS = 122U;
+const std::size_t FAMILY_STATUS_LENGTH = 11U;
+const std::size_t FAMILY_CHILDREN = 133U;
+const std::size_t FAMILY_MAX_CHILDREN = 25U;
+const std::size_t FAMILY_STAMP = 233U;
+const std::size_t FAMILY_STAMP_LENGTH = 8U;
+const std::size_t FAMILY_FLAG = 241U;
 
 bool Printable(unsigned char ch)
 {
@@ -109,6 +163,169 @@ void PrintBytes(const std::vector<unsigned char>& data,
 	}
 	std::cout << std::setfill(' ') << std::dec;
 }
+
+std::uint32_t BtrieveAddress(const std::vector<unsigned char>& data,
+	std::size_t offset)
+{
+	/* Old Btrieve stores a file address as two little-endian words, with
+	 * the high word first. */
+	const std::uint32_t high = static_cast<std::uint32_t>(data[offset])
+		| (static_cast<std::uint32_t>(data[offset + 1U]) << 8U);
+	const std::uint32_t low = static_cast<std::uint32_t>(data[offset + 2U])
+		| (static_cast<std::uint32_t>(data[offset + 3U]) << 8U);
+	return (high << 16U) | low;
+}
+
+bool ReadMarriageFile(std::vector<unsigned char>& data)
+{
+	std::ifstream marriageFile(MARRIAGE_FILE, std::ios::in | std::ios::binary);
+	if ( !marriageFile.is_open() ) {
+		std::cerr << "Error: cannot open " << MARRIAGE_FILE << '\n';
+		return false;
+	}
+	data.assign((std::istreambuf_iterator<char>(marriageFile)),
+		std::istreambuf_iterator<char>());
+	return true;
+}
+
+struct TFamilyRecord {
+	std::size_t address;
+	bool indexed;
+	std::vector<unsigned char> record;
+};
+
+struct TFamilyScan {
+	std::map<std::uint32_t, TFamilyRecord> families;
+	unsigned int indexEntries;
+	unsigned int indexMismatches;
+	unsigned int slots;
+	unsigned int failures;
+	unsigned int duplicates;
+};
+
+/* Find the family records through the key-0 index, then scan every
+ * five-byte slot on the data pages that index points into.  The scan
+ * recovers records whose index entries sit on non-leaf pages; no record is
+ * accepted unless it expands to the full family length, and its family
+ * number is taken from the expanded record, never from slot position. */
+void ScanFamilies(const std::vector<unsigned char>& data, TFamilyScan& scan)
+{
+	scan.indexEntries = scan.indexMismatches = 0U;
+	scan.slots = scan.failures = scan.duplicates = 0U;
+	std::map<std::size_t, std::uint32_t> indexed;
+	std::set<std::size_t> dataPages;
+	const std::size_t pageCount = data.size() / PAGE_SIZE;
+	for ( std::size_t page = 1U; page < pageCount; ++page ) {
+		const std::size_t pageBegin = page * PAGE_SIZE;
+		if ( data[pageBegin + 4U] != 0x00U || data[pageBegin + 5U] != 0x00U
+			|| data[pageBegin + 6U] != 0x2aU
+			|| data[pageBegin + 7U] != 0x00U ) continue;
+		for ( std::size_t offset = pageBegin + 16U;
+			offset + 12U <= pageBegin + PAGE_SIZE; offset += 12U ) {
+			const std::uint32_t key = BigEndian32(data, offset);
+			if ( key == 0U ) continue;
+			const std::uint32_t duplicate = BigEndian32(data, offset + 8U);
+			if ( duplicate != 0U && duplicate != 0xffffffffU ) continue;
+			const std::size_t address = BtrieveAddress(data, offset + 4U);
+			if ( address + FAMILY_POINTER_LENGTH > data.size() ) continue;
+			indexed[address] = key;
+			dataPages.insert(address / PAGE_SIZE);
+			scan.indexEntries++;
+		}
+	}
+	for ( std::set<std::size_t>::const_iterator page = dataPages.begin();
+		page != dataPages.end(); ++page ) {
+		const std::size_t pageBegin = *page * PAGE_SIZE;
+		for ( std::size_t address = pageBegin + 6U;
+			address + FAMILY_POINTER_LENGTH <= pageBegin + PAGE_SIZE;
+			address += FAMILY_POINTER_LENGTH ) {
+			if ( data[address + 2U] != 0U || data[address + 4U] == 0U ) continue;
+			scan.slots++;
+			std::vector<unsigned char> record;
+			if ( !DecodeCompressedRecord(data, address, record)
+				|| record.size() != FAMILY_RECORD_LENGTH ) {
+				scan.failures++;
+				std::cout << "FAMILY_SLOT_FAILURE address=0x" << std::hex
+					<< address << std::dec << '\n';
+				continue;
+			}
+			const std::uint32_t family = BigEndian32(record, 0U);
+			const std::map<std::size_t, std::uint32_t>::const_iterator key =
+				indexed.find(address);
+			if ( key != indexed.end() && key->second != family ) {
+				scan.indexMismatches++;
+				std::cout << "FAMILY_INDEX_MISMATCH address=0x" << std::hex
+					<< address << std::dec << " index_key=" << key->second
+					<< " record_key=" << family << '\n';
+			}
+			if ( scan.families.count(family) != 0U ) {
+				scan.duplicates++;
+				std::cout << "FAMILY_DUPLICATE id=" << family << " address=0x"
+					<< std::hex << address << std::dec << '\n';
+				continue;
+			}
+			TFamilyRecord entry;
+			entry.address = address;
+			entry.indexed = key != indexed.end();
+			entry.record = record;
+			scan.families[family] = entry;
+		}
+	}
+}
+
+std::string FamilyText(const std::vector<unsigned char>& record,
+	std::size_t offset, std::size_t length)
+{
+	std::string text;
+	for ( std::size_t i = 0U; i < length && record[offset + i] != 0U; ++i )
+		text += Printable(record[offset + i])
+			? static_cast<char>(record[offset + i]) : '?';
+	const std::size_t end = text.find_last_not_of(' ');
+	return end == std::string::npos ? std::string() : text.substr(0U, end + 1U);
+}
+
+void PrintFamilyFields(const std::vector<unsigned char>& record)
+{
+	std::cout << " husband=" << BigEndian32(record, FAMILY_HUSBAND)
+		<< " wife=" << BigEndian32(record, FAMILY_WIFE);
+	for ( std::size_t slot = 0U; slot < 2U; ++slot )
+		std::cout << " date_" << slot + 1U << "=\"" << FamilyText(record,
+			FAMILY_DATES + slot * FAMILY_DATE_LENGTH, FAMILY_DATE_LENGTH)
+			<< '"';
+	std::cout << " location_refs=" << BigEndian32(record, FAMILY_LOCATIONS)
+		<< ',' << BigEndian32(record, FAMILY_LOCATIONS + 4U);
+	std::cout << " source_refs=";
+	for ( std::size_t slot = 0U; slot < FAMILY_SLOTS; ++slot )
+		std::cout << (slot ? "," : "")
+			<< BigEndian32(record, FAMILY_SOURCES + slot * 4U);
+	std::cout << " source_details=";
+	for ( std::size_t slot = 0U; slot < FAMILY_SLOTS; ++slot )
+		std::cout << (slot ? "," : "") << '"' << FamilyText(record,
+			FAMILY_CITATIONS + slot * FAMILY_CITATION_LENGTH,
+			FAMILY_CITATION_DETAIL_LENGTH) << '"';
+	std::cout << " source_quality=";
+	for ( std::size_t slot = 0U; slot < FAMILY_SLOTS; ++slot )
+		std::cout << (slot ? "," : "") << '"' << FamilyText(record,
+			FAMILY_CITATIONS + slot * FAMILY_CITATION_LENGTH
+				+ FAMILY_CITATION_DETAIL_LENGTH,
+			FAMILY_CITATION_LENGTH - FAMILY_CITATION_DETAIL_LENGTH) << '"';
+	std::cout << " status=\"" << FamilyText(record, FAMILY_STATUS,
+		FAMILY_STATUS_LENGTH) << "\" children=";
+	bool first = true;
+	for ( std::size_t child = 0U; child < FAMILY_MAX_CHILDREN; ++child ) {
+		const std::uint32_t person = BigEndian32(record,
+			FAMILY_CHILDREN + child * 4U);
+		/* Slot 9 is empty in every record, including the five families
+		 * with more than eight children, so skip empty slots rather than
+		 * stopping at the first one. */
+		if ( person == 0U ) continue;
+		std::cout << (first ? "" : ",") << person;
+		first = false;
+	}
+	std::cout << " stamp=" << FamilyText(record, FAMILY_STAMP,
+		FAMILY_STAMP_LENGTH) << " flag=\""
+		<< FamilyText(record, FAMILY_FLAG, 1U) << '"';
+}
 }
 
 using namespace std;
@@ -186,6 +403,54 @@ int TReadMarriages::Dump() const
 		}
 	}
 	std::cout << "MARRIAGE_RECORDS total=" << count << '\n';
+	return 0;
+}
+
+int TReadMarriages::DumpFamilies() const
+{
+	std::vector<unsigned char> data;
+	if ( !ReadMarriageFile(data) ) return 1;
+	TFamilyScan scan;
+	ScanFamilies(data, scan);
+	for ( std::map<std::uint32_t, TFamilyRecord>::const_iterator family =
+		scan.families.begin(); family != scan.families.end(); ++family ) {
+		std::cout << "FAMILY_RECORD id=" << family->first << " address=0x"
+			<< std::hex << family->second.address << std::dec
+			<< " indexed=" << (family->second.indexed ? "yes" : "no");
+		PrintFamilyFields(family->second.record);
+		std::cout << '\n';
+	}
+	std::cout << "FAMILY_RECORDS decoded=" << scan.families.size()
+		<< " index_entries=" << scan.indexEntries
+		<< " index_mismatches=" << scan.indexMismatches
+		<< " slots=" << scan.slots << " failures=" << scan.failures
+		<< " duplicates=" << scan.duplicates << '\n';
+	return 0;
+}
+
+int TReadMarriages::TraceFamily(std::uint32_t family) const
+{
+	std::vector<unsigned char> data;
+	if ( !ReadMarriageFile(data) ) return 1;
+	TFamilyScan scan;
+	ScanFamilies(data, scan);
+	const std::map<std::uint32_t, TFamilyRecord>::const_iterator entry =
+		scan.families.find(family);
+	if ( entry == scan.families.end() ) {
+		std::cout << "FAMILY_TRACE id=" << family << " status=not-found\n";
+		return 1;
+	}
+	std::cout << "FAMILY_TRACE id=" << family << " address=0x" << std::hex
+		<< entry->second.address << std::dec << " pointer=";
+	for ( std::size_t i = 0U; i < FAMILY_POINTER_LENGTH; ++i )
+		std::cout << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned int>(data[entry->second.address + i]);
+	std::cout << std::dec << std::setfill(' ') << " expanded_length="
+		<< entry->second.record.size();
+	PrintFamilyFields(entry->second.record);
+	std::cout << '\n';
+	/* Offsets in this dump are relative to the expanded record. */
+	PrintBytes(entry->second.record, 0U, entry->second.record.size());
 	return 0;
 }
 //---------------------------------------------------------------------------
