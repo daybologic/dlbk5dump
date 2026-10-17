@@ -6,3 +6,4 @@ CORRECTIONS.md
 *.png
 *.dot
 *.ged
+__pycache__/
