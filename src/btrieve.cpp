@@ -11,6 +11,63 @@ std::uint16_t LittleEndian16(const std::vector<unsigned char>& data,
 	return static_cast<std::uint16_t>(data[offset])
 		| (static_cast<std::uint16_t>(data[offset + 1U]) << 8U);
 }
+
+std::uint32_t BigEndian32(const std::vector<unsigned char>& data,
+	std::size_t offset)
+{
+	return (static_cast<std::uint32_t>(data[offset]) << 24U)
+		| (static_cast<std::uint32_t>(data[offset + 1U]) << 16U)
+		| (static_cast<std::uint32_t>(data[offset + 2U]) << 8U)
+		| static_cast<std::uint32_t>(data[offset + 3U]);
+}
+
+/* File control record (page 0) fields used by the scanner. */
+const std::size_t FCR_PHYSICAL_LENGTH = 0x18U;
+const std::size_t FCR_RECORD_COUNT = 0x1cU;
+const std::size_t DATA_PAGE_FLAGS = 4U;
+const std::size_t DATA_PAGE_SLOTS = 6U;
+const std::uint16_t DATA_PAGE_FLAG = 0x8000U;
+const std::size_t POINTER_LENGTH = 5U;
+}
+
+void ScanCompressedRecords(const std::vector<unsigned char>& data,
+	std::size_t recordLength, TBtrieveScan& scan)
+{
+	scan.headerRecords = scan.slots = scan.failures = scan.duplicates = 0U;
+	scan.records.clear();
+	if ( data.size() < PAGE_SIZE ) return;
+	const std::size_t physical = LittleEndian16(data, FCR_PHYSICAL_LENGTH);
+	scan.headerRecords = static_cast<unsigned int>(
+		LittleEndian16(data, FCR_RECORD_COUNT)
+		| (static_cast<std::uint32_t>(
+			LittleEndian16(data, FCR_RECORD_COUNT + 2U)) << 16U));
+	if ( physical < POINTER_LENGTH ) return;
+	for ( std::size_t page = 1U; page < data.size() / PAGE_SIZE; ++page ) {
+		const std::size_t pageBegin = page * PAGE_SIZE;
+		if ( !(LittleEndian16(data, pageBegin + DATA_PAGE_FLAGS)
+			& DATA_PAGE_FLAG) ) continue;
+		for ( std::size_t address = pageBegin + DATA_PAGE_SLOTS;
+			address + physical <= pageBegin + PAGE_SIZE;
+			address += physical ) {
+			if ( data[address + 4U] == 0U ) continue;
+			scan.slots++;
+			std::vector<unsigned char> record;
+			if ( !DecodeCompressedRecord(data, address, record)
+				|| record.size() != recordLength ) {
+				scan.failures++;
+				continue;
+			}
+			const std::uint32_t key = BigEndian32(record, 0U);
+			if ( scan.records.count(key) != 0U ) {
+				scan.duplicates++;
+				continue;
+			}
+			TBtrieveRecord entry;
+			entry.address = address;
+			entry.record = record;
+			scan.records[key] = entry;
+		}
+	}
 }
 
 bool DecodeCompressedRecord(const std::vector<unsigned char>& data,

@@ -6,6 +6,7 @@
 #include <string>
 //#include <map>
 
+#include "lookup.hpp"
 #include "marriage.hpp"
 #include "person.hpp"
 
@@ -50,6 +51,7 @@ static bool CheckFiles()
 //---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
+	TReadLookups lookups;
 	TReadMarriages marriages;
 	TReadPersons persons;
 
@@ -162,6 +164,12 @@ int main(int argc, char **argv)
 	if ( argc == 2 && strcmp(argv[1], "--dump-marriages") == 0 ) {
 		return marriages.Dump();
 	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-sources") == 0 ) {
+		return lookups.DumpSources();
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-locations") == 0 ) {
+		return lookups.DumpLocations();
+	}
 	if ( argc == 2 && strcmp(argv[1], "--dump-families") == 0 ) {
 		return marriages.DumpFamilies();
 	}
@@ -184,7 +192,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
