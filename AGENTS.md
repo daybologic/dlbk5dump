@@ -51,7 +51,8 @@ they cannot be mapped safely to a GEDCOM event; do not discard them merely
 because the corresponding fixed record lacks the date.
 
 Emit decoded source descriptions as standalone GEDCOM `SOUR` records, but
-retain the original BK5 source-slot notes and do not invent event citations.
+emit person-level `SOUR` pointers for decoded source slots, retain the
+original BK5 source-slot notes, and do not invent event citations.
 
 Treat `--dump-relations` output as unvalidated B-tree pointer candidates, not
 as family relationships, unless an independent record-aware decoder proves

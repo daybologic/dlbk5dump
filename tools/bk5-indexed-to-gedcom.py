@@ -391,24 +391,29 @@ def main():
             if not source_id:
                 continue
             description = sources.get(source_id, "[not decoded]")
+            if source_id in sources:
+                emit("1 SOUR @S{}@".format(source_id))
             emit_note("BK5 source slot {} ({}): {}".format(
                 slot, source_id, description))
         for slot, offset in enumerate(DATE_SLOTS):
             date = person["dates"].get(offset)
-            if not date:
-                continue
             tag = DATE_TAGS[slot]
             if tag is None:
-                emit_note("BK5 date slot {} ({}): {}".format(
-                    slot + 1, offset, gedcom_date(date)))
+                if date:
+                    emit_note("BK5 date slot {} ({}): {}".format(
+                        slot + 1, offset, gedcom_date(date)))
+                continue
+            location_id = (person["location_refs"][slot]
+                           if slot < len(person["location_refs"])
+                           else 0)
+            if not date and not location_id:
                 continue
             emit("1 {}".format(tag))
-            emit("2 DATE {}".format(gedcom_date(date)))
-            if slot < len(person["location_refs"]):
-                location_id = person["location_refs"][slot]
-                if location_id:
-                    emit("2 PLAC {}".format(
-                        locations.get(location_id, "[not decoded]")))
+            if date:
+                emit("2 DATE {}".format(gedcom_date(date)))
+            if location_id:
+                emit("2 PLAC {}".format(
+                    locations.get(location_id, "[not decoded]")))
         for offset, date in sorted(person["dates"].items()):
             if offset not in DATE_SLOTS:
                 emit_note("BK5 date at {}: {}".format(

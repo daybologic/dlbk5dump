@@ -62,8 +62,8 @@ configuration metadata, not person records, so they are audited separately
 and are not turned into GEDCOM individuals or relationships.
 
 Decoded `BKSOURCE.DT5` descriptions are also emitted as standalone GEDCOM
-`SOUR` records. Person source-slot notes remain in place because the exact
-event citation for each legacy slot is not inferred.
+`SOUR` records. Known source slots also produce person-level `SOUR` pointers;
+the original slot notes remain in place, and no event citation is inferred.
 
 `make audit` regenerates the intermediate GEDCOM and checks decoded date
 coverage, family-reference coverage, duplicate IDs, and dangling links.
