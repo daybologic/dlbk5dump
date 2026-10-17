@@ -80,9 +80,11 @@ def main():
                       if line.startswith("1 NOTE BK5 raw date at ")]
     mail_runs = printable_runs("BK5/BKMAIL.DT5")
     mail_notes = [line for line in ged_lines
-                  if line.startswith("1 CONT BKMAIL offset ")]
+                  if line.startswith(("1 CONT BKMAIL offset ",
+                                       "2 CONT BKMAIL offset "))]
     altkey_notes = [line for line in ged_lines
-                    if line.startswith("1 CONT ALTKEYS slot ")]
+                    if line.startswith(("1 CONT ALTKEYS slot ",
+                                         "2 CONT ALTKEYS slot "))]
     unresolved_lookup = [line for line in ged_lines
                          if "[not decoded]" in line]
     missing_families = sorted(family_refs - set(families))

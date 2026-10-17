@@ -270,6 +270,47 @@ def emit(line=""):
     print(line)
 
 
+def note_chunks(text, prefix_length):
+    """Split note text so the complete GEDCOM line stays within 255 chars."""
+    text = str(text)
+    width = 255 - prefix_length
+    if width < 1:
+        raise ValueError("GEDCOM note prefix is too long")
+    return [text[offset:offset + width]
+            for offset in range(0, max(1, len(text)), width)]
+
+
+def emit_note(text, level=1):
+    """Emit one NOTE and CONC records without exceeding GEDCOM line limits."""
+    lines = str(text).splitlines() or [""]
+    emit_note_line = "{} NOTE ".format(level)
+    emit(emit_note_line + note_chunks(lines[0], len(emit_note_line))[0])
+    for chunk in note_chunks(lines[0], len("{} CONC ".format(level + 1)))[1:]:
+        emit("{} CONC {}".format(level + 1, chunk))
+    for line in lines[1:]:
+        cont_prefix = "{} CONT ".format(level + 1)
+        chunks = note_chunks(line, len(cont_prefix))
+        emit(cont_prefix + chunks[0])
+        for chunk in chunks[1:]:
+            emit("{} CONC {}".format(level + 1, chunk))
+
+
+def emit_note_record(xref, lines):
+    """Emit an independent NOTE record with valid text and continuations."""
+    first_prefix = "0 @{}@ NOTE ".format(xref)
+    first_line = str(lines[0]) if lines else ""
+    chunks = note_chunks(first_line, len(first_prefix))
+    emit(first_prefix + chunks[0])
+    for chunk in chunks[1:]:
+        emit("1 CONC {}".format(chunk))
+    for line in lines[1:]:
+        cont_prefix = "1 CONT "
+        chunks = note_chunks(line, len(cont_prefix))
+        emit(cont_prefix + chunks[0])
+        for chunk in chunks[1:]:
+            emit("1 CONC {}".format(chunk))
+
+
 def main():
     people, unresolved = parse_people(run_dump("--dump-id-records"))
     locations = parse_lookup_file("BK5/BKLOCATE.DT5")
@@ -299,25 +340,31 @@ def main():
     emit("1 GEDC")
     emit("2 VERS 5.5.1")
     emit("2 FORM LINEAGE-LINKED")
-    emit("1 NOTE This is an intermediate export of decoded BK5 fixed records.")
-    emit("1 NOTE Raw-only and unresolved records require a later reconciliation pass.")
-    emit("1 NOTE Family reference order is preserved from BKPERSON.DT5.")
-    emit("1 NOTE {} non-empty ALTKEYS.DT5 slots are preserved without a person link.".format(
-        len(altkeys)))
+    header_notes = [
+        "This is an intermediate export of decoded BK5 fixed records.",
+        "Raw-only and unresolved records require a later reconciliation pass.",
+        "Family reference order is preserved from BKPERSON.DT5.",
+        "{} non-empty ALTKEYS.DT5 slots are preserved without a person link.".format(
+            len(altkeys)),
+    ]
     for slot, text in altkeys:
-        emit("1 CONT ALTKEYS slot {}: {}".format(slot, text))
-    emit("1 NOTE {} unassigned BKMAIL.DT5 text runs are preserved.".format(
+        header_notes.append("ALTKEYS slot {}: {}".format(slot, text))
+    header_notes.append("{} unassigned BKMAIL.DT5 text runs are preserved.".format(
         len(mail_text)))
     for offset, text in mail_text:
-        emit("1 CONT BKMAIL offset 0x{:x}: {}".format(offset, text))
-    emit("1 NOTE {} marriage records lacked an unambiguous family ID and were not linked.".format(
-        len(unresolved_marriages)))
+        header_notes.append("BKMAIL offset 0x{:x}: {}".format(offset, text))
+    header_notes.append(
+        "{} marriage records lacked an unambiguous family ID and were not linked.".format(
+            len(unresolved_marriages)))
     for spouse_1, spouse_2, date, common in unresolved_marriages:
-        emit("1 CONT Unlinked BKMARR date={} spouse_ref_1={} spouse_ref_2={} common_family_refs={}".format(
+        header_notes.append("Unlinked BKMARR date={} spouse_ref_1={} spouse_ref_2={} common_family_refs={}".format(
             gedcom_date(date), spouse_1, spouse_2,
             ",".join("0x{:x}".format(value) for value in common) or "none"))
-    emit("1 NOTE BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;")
-    emit("1 NOTE slot 5 remains an audit note because it is the other-date field.")
+    header_notes.extend([
+        "BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;",
+        "slot 5 remains an audit note because it is the other-date field.",
+    ])
+    emit_note("\n".join(header_notes))
     emit("1 CHAR UTF-8")
 
     for source_id, description in sorted(sources.items()):
@@ -333,18 +380,18 @@ def main():
         if person["occupation"]:
             emit("1 OCCU {}".format(person["occupation"]))
         for note in person["notes"]:
-            emit("1 NOTE BK5: {}".format(note))
+            emit_note("BK5: {}".format(note))
         for slot, location_id in enumerate(person["location_refs"], 1):
             if not location_id:
                 continue
             description = locations.get(location_id, "[not decoded]")
-            emit("1 NOTE BK5 location slot {} ({}): {}".format(
+            emit_note("BK5 location slot {} ({}): {}".format(
                 slot, location_id, description))
         for slot, source_id in enumerate(person["source_refs"], 1):
             if not source_id:
                 continue
             description = sources.get(source_id, "[not decoded]")
-            emit("1 NOTE BK5 source slot {} ({}): {}".format(
+            emit_note("BK5 source slot {} ({}): {}".format(
                 slot, source_id, description))
         for slot, offset in enumerate(DATE_SLOTS):
             date = person["dates"].get(offset)
@@ -352,7 +399,7 @@ def main():
                 continue
             tag = DATE_TAGS[slot]
             if tag is None:
-                emit("1 NOTE BK5 date slot {} ({}): {}".format(
+                emit_note("BK5 date slot {} ({}): {}".format(
                     slot + 1, offset, gedcom_date(date)))
                 continue
             emit("1 {}".format(tag))
@@ -364,44 +411,44 @@ def main():
                         locations.get(location_id, "[not decoded]")))
         for offset, date in sorted(person["dates"].items()):
             if offset not in DATE_SLOTS:
-                emit("1 NOTE BK5 date at {}: {}".format(
+                emit_note("BK5 date at {}: {}".format(
                     offset, gedcom_date(date)))
         refs = person["families"]
         roles = family_roles(person_id, refs, marriages)
         for family_id, role in roles:
             emit("1 {} {}".format(role, family_tag(family_id)))
         if len(roles) < len([value for value in refs if value]):
-            emit("1 NOTE Additional BK5 family references: {}".format(
+            emit_note("Additional BK5 family references: {}".format(
                 ", ".join(family_tag(value) for value in refs
                           if value and family_tag(value) not in
                           {family_tag(family_id) for family_id, _ in roles})))
         for family_id in marriage_families_by_person.get(person_id, []):
             if len(refs) < 2 or refs[1] != family_id:
                 emit("1 FAMS {}".format(family_tag(family_id)))
-        emit("1 NOTE BK5 fixed record address 0x{}; expanded length {}".format(
+        emit_note("BK5 fixed record address 0x{}; expanded length {}".format(
             person["address"], person["length"]))
         if person_id in raw_by_id:
             raw = raw_by_id[person_id]
-            emit("1 NOTE BK5 raw record offset {}".format(raw["offset"]))
-            emit("1 NOTE BK5 raw name: {}".format(raw["raw_name"]))
+            emit_note("BK5 raw record offset {}".format(raw["offset"]))
+            emit_note("BK5 raw name: {}".format(raw["raw_name"]))
             for date_offset, date in raw["dates"]:
-                emit("1 NOTE BK5 raw date at {}: {}".format(
+                emit_note("BK5 raw date at {}: {}".format(
                     date_offset, gedcom_date(date)))
             extra_families = [family_id for family_id in raw["families"]
                               if family_id and family_id not in refs]
             if extra_families:
-                emit("1 NOTE BK5 raw family references not present in fixed record: {}".format(
+                emit_note("BK5 raw family references not present in fixed record: {}".format(
                     ", ".join(family_tag(value)
                               for value in extra_families)))
 
     for person in raw_unmerged:
         emit("0 @I{}@ INDI".format(person["xref"]))
         emit("1 NAME {}".format(gedcom_name(raw_display_name(person))))
-        emit("1 NOTE BK5 raw name: {}".format(person["raw_name"]))
+        emit_note("BK5 raw name: {}".format(person["raw_name"]))
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
         for date_offset, date in person["dates"]:
-            emit("1 NOTE BK5 raw date at {}: {}".format(
+            emit_note("BK5 raw date at {}: {}".format(
                 date_offset, gedcom_date(date)))
         refs = person["families"]
         if person["person_id"] is not None and refs:
@@ -410,18 +457,18 @@ def main():
                 emit("1 {} {}".format(role, family_tag(family_id)))
             for family_id in refs[2:]:
                 if family_id:
-                    emit("1 NOTE Additional BK5 raw family reference {}".format(
+                    emit_note("Additional BK5 raw family reference {}".format(
                         family_tag(family_id)))
         else:
             for family_id in refs:
                 if family_id:
-                    emit("1 NOTE BK5 raw family reference {} (role unresolved)".format(
+                    emit_note("BK5 raw family reference {} (role unresolved)".format(
                         family_tag(family_id)))
-        emit("1 NOTE BK5 raw person record offset {}".format(person["offset"]))
+        emit_note("BK5 raw person record offset {}".format(person["offset"]))
 
     for person_id in sorted(placeholders):
         emit("0 @I{}@ INDI".format(person_id))
-        emit("1 NOTE Unresolved BK5 marriage spouse reference {}".format(
+        emit_note("Unresolved BK5 marriage spouse reference {}".format(
             person_id))
 
     family_ids = set(marriages)
@@ -463,7 +510,7 @@ def main():
             emit("2 DATE {}".format(
                 gedcom_date(marriages[family_id]["date"])))
             if marriages[family_id]["inferred_family_id"]:
-                emit("1 NOTE {}".format(marriages[family_id]["inference"]))
+                emit_note(marriages[family_id]["inference"])
             known_spouses = {person_id for person_id, _ in spouses}
             for index, person_id in enumerate(marriages[family_id]["spouses"]):
                 if person_id in known_spouses:
@@ -471,13 +518,13 @@ def main():
                 role = "HUSB" if index == 0 else "WIFE"
                 emit("1 {} @I{}@".format(role, person_id))
         if not spouses or not children:
-            emit("1 NOTE Incomplete indexed view; consult raw BK5 records.")
+            emit_note("Incomplete indexed view; consult raw BK5 records.")
 
-    emit("0 @NUNRESOLVED@ NOTE")
-    emit("1 TEXT {} indexed entries were not decoded or were not named.".format(
-        len(unresolved)))
-    for line in unresolved:
-        emit("1 CONT {}".format(line))
+    emit_note_record("NUNRESOLVED", [
+        "{} indexed entries were not decoded or were not named.".format(
+            len(unresolved)),
+        *unresolved,
+    ])
     emit("0 TRLR")
 
 
