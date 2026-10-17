@@ -285,6 +285,9 @@ def main():
 
     emit("0 HEAD")
     emit("1 SOUR dlbk5dump")
+    emit("1 GEDC")
+    emit("2 VERS 5.5.1")
+    emit("2 FORM LINEAGE-LINKED")
     emit("1 NOTE This is an intermediate export of decoded BK5 fixed records.")
     emit("1 NOTE Raw-only and unresolved records require a later reconciliation pass.")
     emit("1 NOTE Family reference order is preserved from BKPERSON.DT5.")
