@@ -116,49 +116,41 @@ def parse_people(text):
     return people, unresolved
 
 
-def parse_lookup_file(path, trim_location_control=False):
-    """Read the source descriptions referenced by BKPERSON.DT5.
+QUOTED = r'"((?:[^"\\]|\\.)*)"'
+SOURCE_RE = re.compile(
+    r'^SOURCE_RECORD id=(\d+) address=0x[0-9a-f]+ '
+    r'line_1=' + QUOTED + r' line_2=' + QUOTED + r' line_3=' + QUOTED + r'$')
+LOCATION_RE = re.compile(
+    r'^LOCATION_RECORD id=(\d+) address=0x[0-9a-f]+ name=' + QUOTED + r'$')
 
-    Source records begin with a big-endian source number followed by printable
-    text.  The surrounding Btrieve record metadata is deliberately ignored;
-    the text is retained only when the record boundary is unambiguous.
+
+def unquote(value):
+    """Undo the backslash escaping used by the dlbk5dump text dumps."""
+    return re.sub(r'\\(.)', r'\1', value)
+
+
+def parse_sources(text):
+    """Read BKSOURCE.DT5 records decoded by --dump-sources.
+
+    Each source holds up to three 78-column lines; blank lines are dropped.
     """
-    data = open(path, "rb").read()
-    candidates = {}
-    claimed_until = 0
-    for offset in range(4, len(data) - 8):
-        # A record's own number and text cannot start another record.  The
-        # number's low byte followed by text otherwise reads as a second,
-        # truncated record one byte later (source 1 "BIRTH CERTIFICATE"
-        # also matched as source 322 "IRTH CERTIFICATE").
-        if offset < claimed_until or data[offset - 1] != 0:
-            continue
-        source_id = int.from_bytes(data[offset:offset + 4], "big")
-        if not 1 <= source_id <= 1000:
-            continue
-        first = offset + 4
-        if sum(32 <= value < 127 for value in data[first:first + 3]) < 3:
-            continue
-        end = first
-        while end < len(data) and 32 <= data[end] < 127:
-            end += 1
-        claimed_until = end
-        field = data[first:end]
-        # BKLOCATE occasionally stores a printable control byte immediately
-        # before the NUL terminator.  It must not become part of the place
-        # name; the source-description table does not use this repair.
-        # Only punctuation has been observed in that position, so a letter
-        # or digit there is kept rather than risk truncating a real name.
-        if trim_location_control and end < len(data) and data[end] == 0 \
-                and field and not chr(field[-1]).isalnum():
-            field = field[:-1]
-        text = field.decode("cp437", "replace").rstrip()
-        if trim_location_control and text.endswith("*") \
-                and text[:-1].endswith(" "):
-            text = text[:-1].rstrip()
-        if len(text) >= 3 and source_id not in candidates:
-            candidates[source_id] = text
-    return candidates
+    sources = {}
+    for line in text.splitlines():
+        match = SOURCE_RE.match(line)
+        if match:
+            lines = [unquote(value) for value in match.groups()[1:]]
+            sources[int(match.group(1))] = [value for value in lines if value]
+    return sources
+
+
+def parse_locations(text):
+    """Read BKLOCATE.DT5 records decoded by --dump-locations."""
+    locations = {}
+    for line in text.splitlines():
+        match = LOCATION_RE.match(line)
+        if match:
+            locations[int(match.group(1))] = unquote(match.group(2))
+    return locations
 
 
 def parse_altkeys(path):
@@ -381,9 +373,10 @@ def emit_note_record(xref, lines):
 
 def main():
     people, unresolved = parse_people(run_dump("--dump-id-records"))
-    locations = parse_lookup_file("BK5/BKLOCATE.DT5",
-                                 trim_location_control=True)
-    sources = parse_lookup_file("BK5/BKSOURCE.DT5")
+    locations = parse_locations(run_dump("--dump-locations"))
+    source_lines = parse_sources(run_dump("--dump-sources"))
+    sources = {source_id: " / ".join(lines)
+               for source_id, lines in source_lines.items()}
     altkeys = parse_altkeys("BK5/ALTKEYS.DT5")
     mail_text = parse_printable_runs("BK5/BKMAIL.DT5")
     raw_people = parse_raw_people(run_dump("--dump-records"))
@@ -427,9 +420,12 @@ def main():
     emit_note("\n".join(header_notes))
     emit("1 CHAR UTF-8")
 
-    for source_id, description in sorted(sources.items()):
+    for source_id, lines in sorted(source_lines.items()):
         emit("0 @S{}@ SOUR".format(source_id))
-        emit("1 TITL BK5 source {}: {}".format(source_id, description))
+        lines = lines or [""]
+        emit("1 TITL BK5 source {}: {}".format(source_id, lines[0]).rstrip())
+        for line in lines[1:]:
+            emit("2 CONT {}".format(line))
 
     for person_id in sorted(people):
         person = people[person_id]

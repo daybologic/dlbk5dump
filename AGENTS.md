@@ -20,6 +20,8 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --dump-marriages    # legacy date-string scan of BKMARR.DT5
 ./dlbk5dump --dump-families     # decode all BKMARR.DT5 family records
 ./dlbk5dump --trace-family 31   # one family record, fields and raw bytes
+./dlbk5dump --dump-sources      # decode all BKSOURCE.DT5 source records
+./dlbk5dump --dump-locations    # decode all BKLOCATE.DT5 location records
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 make gedcom > indexed.ged
 make gedcom-file
