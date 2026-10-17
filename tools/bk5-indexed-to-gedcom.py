@@ -105,7 +105,7 @@ def parse_people(text):
     return people, unresolved
 
 
-def parse_lookup_file(path):
+def parse_lookup_file(path, trim_location_control=False):
     """Read the source descriptions referenced by BKPERSON.DT5.
 
     Source records begin with a big-endian source number followed by printable
@@ -126,7 +126,16 @@ def parse_lookup_file(path):
         end = first
         while end < len(data) and 32 <= data[end] < 127:
             end += 1
-        text = data[first:end].decode("cp437", "replace").rstrip()
+        field = data[first:end]
+        # BKLOCATE occasionally stores a printable control byte immediately
+        # before the NUL terminator.  It must not become part of the place
+        # name; the source-description table does not use this repair.
+        if trim_location_control and end < len(data) and data[end] == 0:
+            field = field[:-1]
+        text = field.decode("cp437", "replace").rstrip()
+        if trim_location_control and text.endswith("*") \
+                and text[:-1].endswith(" "):
+            text = text[:-1].rstrip()
         if len(text) >= 3 and source_id not in candidates:
             candidates[source_id] = text
     return candidates
@@ -336,7 +345,8 @@ def emit_note_record(xref, lines):
 
 def main():
     people, unresolved = parse_people(run_dump("--dump-id-records"))
-    locations = parse_lookup_file("BK5/BKLOCATE.DT5")
+    locations = parse_lookup_file("BK5/BKLOCATE.DT5",
+                                 trim_location_control=True)
     sources = parse_lookup_file("BK5/BKSOURCE.DT5")
     altkeys = parse_altkeys("BK5/ALTKEYS.DT5")
     mail_text = parse_printable_runs("BK5/BKMAIL.DT5")
