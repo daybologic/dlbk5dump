@@ -69,6 +69,9 @@ Before submitting changes, run `make`, `make audit`, `git diff --check`, and at 
 
 Use short, imperative commit subjects, consistent with the existing history (for example, `Recover files from Hg at ...`). Keep commits focused. Pull requests should describe the parser or data-format change, identify any assumptions about BK5 files, include the commands used for validation, and attach relevant sample output when behavior changes. Do not commit generated binaries or local BK5 data unless explicitly required.
 
+Commits made by Codex must include this trailer:
+`Co-Authored-By: Codex <noreply@openai.com>`.
+
 ## Data and Repository Hygiene
 
 Treat `BK5/` and `bk5.iso` as input fixtures, not disposable build artifacts. Work from the repository root, avoid modifying legacy files during experiments, and keep compiled executables out of commits.
