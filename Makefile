@@ -5,9 +5,18 @@ TARGET  := dlbk5dump
 SOURCES := src/dlbk5dump.cpp src/marriage.cpp src/person.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-.PHONY: all clean
+.PHONY: all clean gedcom gedcom-file audit
 
 all: $(TARGET)
+
+gedcom: $(TARGET)
+	@./tools/bk5-indexed-to-gedcom.py
+
+gedcom-file: $(TARGET)
+	@./tools/bk5-indexed-to-gedcom.py > indexed.ged
+
+audit: $(TARGET)
+	@./tools/bk5-indexed-to-gedcom.py | ./tools/bk5-audit.py
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@

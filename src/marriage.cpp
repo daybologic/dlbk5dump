@@ -37,22 +37,45 @@ std::uint32_t BigEndian32(const std::vector<unsigned char>& data,
 		| static_cast<std::uint32_t>(data[offset + 3U]);
 }
 
-bool DateAt(const std::vector<unsigned char>& data, std::size_t offset)
+std::size_t DateLengthAt(const std::vector<unsigned char>& data,
+	std::size_t offset)
 {
-	if ( offset + 11U > data.size() ) return false;
+	if ( offset + 11U > data.size() ) return 0U;
 	if ( !std::isdigit(data[offset]) || !std::isdigit(data[offset + 1U])
-		|| data[offset + 2U] != ' ' ) return false;
+		|| data[offset + 2U] != ' ' ) return 0U;
+	const bool fourLetterSeptember = data[offset + 3U] == 'S'
+		&& data[offset + 4U] == 'E' && data[offset + 5U] == 'P'
+		&& data[offset + 6U] == 'T';
+	const std::size_t monthLength = fourLetterSeptember ? 4U : 3U;
+	const std::size_t yearOffset = offset + 3U + monthLength + 1U;
+	if ( yearOffset + 4U > data.size() ) return 0U;
 	static const char *const MONTHS = "JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDEC";
 	std::string month;
 	month += static_cast<char>(data[offset + 3U]);
 	month += static_cast<char>(data[offset + 4U]);
 	month += static_cast<char>(data[offset + 5U]);
-	if ( std::string(MONTHS).find(month) == std::string::npos ) return false;
-	return data[offset + 6U] == ' '
-		&& (std::isdigit(data[offset + 7U]) || data[offset + 7U] == '?')
-		&& (std::isdigit(data[offset + 8U]) || data[offset + 8U] == '?')
-		&& (std::isdigit(data[offset + 9U]) || data[offset + 9U] == '?')
-		&& (std::isdigit(data[offset + 10U]) || data[offset + 10U] == '?');
+	if ( std::string(MONTHS).find(month) == std::string::npos ) return 0U;
+	if ( !fourLetterSeptember && data[offset + 6U] != ' ' ) return 0U;
+	for ( std::size_t i = 0U; i < 4U; ++i ) {
+		if ( !std::isdigit(data[yearOffset + i])
+			&& data[yearOffset + i] != '?' ) return 0U;
+	}
+	return monthLength + 8U;
+}
+
+bool PlausibleSpouseReference(std::uint32_t value)
+{
+	return value <= 10000U;
+}
+
+bool StandardMarriageHeader(const std::vector<unsigned char>& data,
+	std::size_t recordStart, std::size_t dateOffset)
+{
+	if ( dateOffset < 16U || recordStart + 16U > data.size() ) return false;
+	const std::uint32_t spouse1 = BigEndian32(data, recordStart + 8U);
+	const std::uint32_t spouse2 = BigEndian32(data, recordStart + 12U);
+	return spouse1 != 0U && PlausibleSpouseReference(spouse1)
+		&& PlausibleSpouseReference(spouse2);
 }
 
 void PrintBytes(const std::vector<unsigned char>& data,
@@ -96,19 +119,20 @@ int TReadMarriages::Dump() const
 		<< std::hex << DATA_START << std::dec << '\n';
 	unsigned int count = 0U;
 	for ( std::size_t offset = DATA_START; offset + 11U <= data.size(); ++offset ) {
-		if ( !DateAt(data, offset) ) continue;
+		const std::size_t dateLength = DateLengthAt(data, offset);
+		if ( dateLength == 0U ) continue;
 		const bool hasPrefix = offset >= 16U;
 		const std::size_t recordStart = hasPrefix ? offset - 16U : offset;
 		const std::size_t begin = offset >= 16U ? offset - 16U : 0U;
-		const std::size_t end = std::min(data.size(), offset + 48U);
+		const std::size_t end = std::min(data.size(), offset + dateLength + 37U);
 		std::cout << "MARRIAGE_RECORD number=" << (++count)
 			<< " record_offset=" << recordStart
 			<< " date_offset=" << offset << " page=" << offset / PAGE_SIZE
 			<< " page_offset=" << offset % PAGE_SIZE << " date=\"";
-		for ( std::size_t i = 0U; i < 11U; ++i )
+		for ( std::size_t i = 0U; i < dateLength; ++i )
 			std::cout << static_cast<char>(data[offset + i]);
 		std::cout << "\"\n";
-		if ( hasPrefix ) {
+		if ( hasPrefix && StandardMarriageHeader(data, recordStart, offset) ) {
 			std::cout << "    header=";
 			for ( std::size_t i = 0U; i < 8U; ++i )
 				std::cout << std::hex << std::setw(2) << std::setfill('0')
@@ -124,6 +148,17 @@ int TReadMarriages::Dump() const
 					<< static_cast<unsigned int>(data[recordStart + 7U])
 					<< std::dec;
 			std::cout << '\n';
+		} else if ( offset >= 3U && data[offset - 3U] == 0x2aU
+			&& data[offset - 2U] == 0x00U
+			&& data[offset - 1U] != 0U ) {
+			/* Some old records use a compact key immediately before the
+			 * date.  The final byte is a person/index candidate, not a
+			 * proven spouse pair; keep it explicitly labelled. */
+			std::cout << "    layout=compact-date-key compact_ref=0x"
+				<< std::hex << static_cast<unsigned int>(data[offset - 1U])
+				<< std::dec << '\n';
+		} else if ( hasPrefix ) {
+			std::cout << "    layout=unclassified-date-context\n";
 		}
 		PrintBytes(data, begin, end);
 		if ( offset >= 4U ) {

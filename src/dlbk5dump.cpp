@@ -63,6 +63,60 @@ int main(int argc, char **argv)
 	if ( argc == 2 && strcmp(argv[1], "--dump-persons") == 0 ) {
 		return persons.Dump();
 	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-records") == 0 ) {
+		return persons.DumpRecords();
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-id-index") == 0 ) {
+		return persons.DumpIdIndex();
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-id-records") == 0 ) {
+		return persons.DumpIdRecords();
+	}
+	if ( argc == 3 && strcmp(argv[1], "--trace-id") == 0 ) {
+		char *end = NULL;
+		const unsigned long id = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || id > 0xffffffffUL ) {
+			fprintf(stderr, "Error: id must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.TracePersonId(static_cast<std::uint32_t>(id));
+	}
+	if ( argc == 3 && strcmp(argv[1], "--trace-fixed") == 0 ) {
+		char *end = NULL;
+		const unsigned long address = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || address > 0xffffffffUL ) {
+			fprintf(stderr, "Error: fixed address must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.TraceFixedAddress(static_cast<std::uint32_t>(address));
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-records") == 0 ) {
+		return persons.DumpRecords();
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-id-index") == 0 ) {
+		return persons.DumpIdIndex();
+	}
+	if ( argc == 2 && strcmp(argv[1], "--dump-id-records") == 0 ) {
+		return persons.DumpIdRecords();
+	}
+	if ( argc == 3 && strcmp(argv[1], "--trace-id") == 0 ) {
+		char *end = NULL;
+		const unsigned long id = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || id > 0xffffffffUL ) {
+			fprintf(stderr, "Error: id must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.TracePersonId(static_cast<std::uint32_t>(id));
+	}
+	if ( argc == 3 && strcmp(argv[1], "--trace-fixed") == 0 ) {
+		char *end = NULL;
+		const unsigned long address = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || address > 0xffffffffUL ) {
+			fprintf(stderr, "Error: fixed address must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.TraceFixedAddress(static_cast<std::uint32_t>(address));
+	}
 	if ( argc == 3 && strcmp(argv[1], "--page") == 0 ) {
 		char *end = NULL;
 		const unsigned long page = strtoul(argv[2], &end, 10);
@@ -87,6 +141,24 @@ int main(int argc, char **argv)
 	if ( argc == 2 && strcmp(argv[1], "--dump-relations") == 0 ) {
 		return persons.DumpRelations();
 	}
+	if ( argc == 3 && strcmp(argv[1], "--family") == 0 ) {
+		char *end = NULL;
+		const unsigned long family = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || family > 0xffffffffUL ) {
+			fprintf(stderr, "Error: family must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.DumpFamily(static_cast<std::uint32_t>(family));
+	}
+	if ( argc == 3 && strcmp(argv[1], "--family") == 0 ) {
+		char *end = NULL;
+		const unsigned long family = strtoul(argv[2], &end, 0);
+		if ( end == argv[2] || *end != '\0' || family > 0xffffffffUL ) {
+			fprintf(stderr, "Error: family must be a non-negative integer (decimal or 0x-prefixed hexadecimal)\n");
+			return 2;
+		}
+		return persons.DumpFamily(static_cast<std::uint32_t>(family));
+	}
 	if ( argc == 2 && strcmp(argv[1], "--dump-marriages") == 0 ) {
 		return marriages.Dump();
 	}
@@ -100,7 +172,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--page N|--index-page N|--dump-index|--dump-relations|--dump-marriages|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
