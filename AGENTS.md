@@ -66,9 +66,15 @@ Raw variable-page dates must also be retained as offset-labelled notes when
 they cannot be mapped safely to a GEDCOM event; do not discard them merely
 because the corresponding fixed record lacks the date.
 
-Emit decoded source descriptions as standalone GEDCOM `SOUR` records, but
-emit person-level `SOUR` pointers for decoded source slots, retain the
-original BK5 source-slot notes, and do not invent event citations.
+Emit decoded source descriptions as standalone GEDCOM `SOUR` records and
+retain the original BK5 source-slot notes. BK5 keeps one citation per
+date/location slot (`BK5/CHANGES.DOC`: "3 full lines for each
+date/location"), so person source slot n cites event slot n (birth,
+baptism, death, burial, other); the source texts agree (all baptism
+wording is in slot 2, death wording in slot 3). Place each person citation,
+with its `PAGE` and `QUAY`, under its exported event; keep it on the person
+when that event is not exported or is slot 5. Never create an event only to
+hold a citation.
 
 Treat `--dump-relations` output as unvalidated B-tree pointer candidates, not
 as family relationships, unless an independent record-aware decoder proves

@@ -300,28 +300,36 @@ def emit_family_status(ceremony, end_code, end_year):
             end_year))
 
 
-def emit_citation(slot, source_id, detail, quality, sources, label="BK5"):
+def emit_source_citation(source_id, detail, quality, level):
+    """Emit a SOUR pointer with PAGE and QUAY at the given level."""
+    emit("{} SOUR @S{}@".format(level, source_id))
+    if detail:
+        emit("{} PAGE {}".format(level + 1, detail))
+    if quality in ("0", "1", "2", "3"):
+        emit("{} QUAY {}".format(level + 1, quality))
+
+
+def emit_citation(slot, source_id, detail, quality, sources, label="BK5",
+                  on_event=False):
     """Emit one BK5 citation slot as SOUR with PAGE and QUAY.
 
     BK5 citations hold a source number, an 18-character "page" detail and
     a "quality of data" code.  GEDCOM QUAY allows only 0-3, so any other
     code, and any page or quality entered without a source, is kept as a
-    note instead.
+    note instead.  With on_event, the SOUR pointer itself is left for the
+    caller to place under the matching event; the notes are still emitted.
     """
     if not source_id:
         if detail or quality:
             emit_note("{} citation slot {} without source: page={!r} "
                       "quality={!r}".format(label, slot, detail, quality))
         return
-    if source_id in sources:
-        emit("1 SOUR @S{}@".format(source_id))
-        if detail:
-            emit("2 PAGE {}".format(detail))
-        if quality in ("0", "1", "2", "3"):
-            emit("2 QUAY {}".format(quality))
-        elif quality:
-            emit_note("{} citation slot {}: quality code {!r} is outside "
-                      "GEDCOM's 0-3 range".format(label, slot, quality))
+    if source_id in sources and not on_event:
+        emit_source_citation(source_id, detail, quality, 1)
+    if source_id in sources and quality and \
+            quality not in ("0", "1", "2", "3"):
+        emit_note("{} citation slot {}: quality code {!r} is outside "
+                  "GEDCOM's 0-3 range".format(label, slot, quality))
     emit_note("{} source slot {} ({}): {}".format(
         label, slot, source_id, sources.get(source_id, "[not decoded]")))
 
@@ -528,10 +536,20 @@ def main():
             description = locations.get(location_id, "[not decoded]")
             emit_note("BK5 location slot {} ({}): {}".format(
                 slot, location_id, description))
+        # BK5 keeps one citation per date/location slot (CHANGES.DOC:
+        # "3 full lines for each date/location"), so source slot n cites
+        # event slot n.  A citation whose event is not exported stays on
+        # the person rather than creating an event.
+        exported_events = {
+            slot for slot, tag in enumerate(DATE_TAGS)
+            if tag and (person["dates"].get(DATE_SLOTS[slot])
+                        or (slot < len(person["location_refs"])
+                            and person["location_refs"][slot]))}
         for slot, source_id in enumerate(person["source_refs"], 1):
             emit_citation(slot, source_id,
                           person["source_details"][slot - 1],
-                          person["source_quality"][slot - 1], sources)
+                          person["source_quality"][slot - 1], sources,
+                          on_event=slot - 1 in exported_events)
         for slot, offset in enumerate(DATE_SLOTS):
             date = person["dates"].get(offset)
             tag = DATE_TAGS[slot]
@@ -551,6 +569,12 @@ def main():
             if location_id:
                 emit("2 PLAC {}".format(
                     locations.get(location_id, "[not decoded]")))
+            source_id = (person["source_refs"][slot]
+                         if slot < len(person["source_refs"]) else 0)
+            if source_id in sources:
+                emit_source_citation(source_id,
+                                     person["source_details"][slot],
+                                     person["source_quality"][slot], 2)
         for offset, date in sorted(person["dates"].items()):
             if offset not in DATE_SLOTS:
                 emit_note("BK5 date at {}: {}".format(
