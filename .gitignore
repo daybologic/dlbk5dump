@@ -4,6 +4,8 @@ src/*.o
 src/*.d
 CORRECTIONS.md
 INDIE_REPORT.md
+ADDRESSED.md
+NEW_CLAIMS.md
 *.png
 *.dot
 *.ged
