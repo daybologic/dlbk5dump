@@ -42,12 +42,27 @@ def gedcom_date(value):
 def gedcom_name(value):
     """Mark the final name component as the GEDCOM surname."""
     name = value.strip()
+    if name.startswith("THIS INFORMATION"):
+        return "//"
     if "/" in name:
         return name
     fields = name.split()
     if len(fields) < 2:
         return name
+    if "?" in fields[-1] or fields[-1].startswith("("):
+        return "{} //".format(" ".join(fields[:-1]))
+    if fields[-1] == "?":
+        return "{} //".format(" ".join(fields[:-1]))
     return "{} /{}/".format(" ".join(fields[:-1]), fields[-1])
+
+
+def name_requires_note(value):
+    """Return whether the original name needs preserving as an audit note."""
+    name = value.strip()
+    return (name.startswith("THIS INFORMATION")
+            or (len(name.split()) >= 2
+                and ("?" in name.split()[-1]
+                     or name.split()[-1].startswith("("))))
 
 
 def run_dump(*args):
@@ -178,6 +193,10 @@ def parse_raw_people(text):
 def raw_display_name(person):
     """Remove the observed ten-byte sort key and trailing code when safe."""
     raw_name = person["raw_name"]
+    if raw_name.startswith("*I") and len(raw_name) > 3:
+        candidate = raw_name[2:-1].strip()
+        if candidate and candidate[0].isalpha() and " " in candidate:
+            return candidate
     if raw_name.startswith("*") or len(raw_name) <= 11:
         return raw_name
     candidate = raw_name[10:-1].strip()
@@ -204,6 +223,7 @@ def parse_marriages(text, people):
                 result[family_ids[0]] = {
                     "date": pending_date,
                     "spouses": [compact_ref],
+                    "layout_incomplete": True,
                     "inferred_family_id": True,
                     "inference": "Family ID recovered from compact BKMARR key and the person's FAMS reference; spouse pair remains layout-incomplete.",
                 }
@@ -236,6 +256,7 @@ def parse_marriages(text, people):
             result[family_id] = {
                 "date": pending_date,
                 "spouses": [spouse_1, spouse_2],
+                "layout_incomplete": False,
                 "inferred_family_id": inferred,
                 "inference": "Family ID recovered from the common reference in both spouse records." if inferred else "",
             }
@@ -255,7 +276,9 @@ def family_roles(person_id, refs, marriages):
             continue
         marriage = marriages.get(family_id)
         if marriage is not None:
-            role = "FAMS" if person_id in marriage["spouses"] else "FAMC"
+            role = ("FAMS" if person_id in marriage["spouses"]
+                    or (marriage.get("layout_incomplete") and index == 1)
+                    else "FAMC")
         else:
             role = "FAMC" if index == 0 else "FAMS"
         result.append((family_id, role))
@@ -375,6 +398,8 @@ def main():
         person = people[person_id]
         emit("0 @I{}@ INDI".format(person_id))
         emit("1 NAME {}".format(gedcom_name(person["name"])))
+        if name_requires_note(person["name"]):
+            emit_note("BK5 original name: {}".format(person["name"]))
         if person["sex"]:
             emit("1 SEX {}".format(person["sex"]))
         if person["occupation"]:
