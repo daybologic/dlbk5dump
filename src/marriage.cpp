@@ -78,6 +78,21 @@ bool StandardMarriageHeader(const std::vector<unsigned char>& data,
 		&& PlausibleSpouseReference(spouse2);
 }
 
+bool AlternateFamilyHint(const std::vector<unsigned char>& data,
+	std::size_t recordStart, std::size_t dateOffset)
+{
+	if ( dateOffset < 16U || recordStart + 8U > data.size() ) return false;
+	/* Several older BKMARR headers retain a family-like byte in the same
+	 * position, but their layout is not sufficiently stable to promote it to
+	 * a family ID. Report it as a candidate for manual correlation only. */
+	return data[recordStart + 2U] == 0x17U
+		&& data[recordStart + 3U] == 0x00U
+		&& data[recordStart + 4U] == 0x00U
+		&& data[recordStart + 5U] == 0x00U
+		&& data[recordStart + 6U] == 0x00U
+		&& data[recordStart + 7U] != 0U;
+}
+
 void PrintBytes(const std::vector<unsigned char>& data,
 	std::size_t begin, std::size_t end)
 {
@@ -145,6 +160,10 @@ int TReadMarriages::Dump() const
 			if ( data[recordStart + 1U] == 0x2aU
 				&& data[recordStart + 2U] == 0x17U )
 				std::cout << " family_id=0x" << std::hex
+					<< static_cast<unsigned int>(data[recordStart + 7U])
+					<< std::dec;
+			else if ( AlternateFamilyHint(data, recordStart, offset) )
+				std::cout << " family_hint=0x" << std::hex
 					<< static_cast<unsigned int>(data[recordStart + 7U])
 					<< std::dec;
 			std::cout << '\n';
