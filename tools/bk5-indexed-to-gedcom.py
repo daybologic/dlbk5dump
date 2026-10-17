@@ -125,8 +125,13 @@ def parse_lookup_file(path, trim_location_control=False):
     """
     data = open(path, "rb").read()
     candidates = {}
+    claimed_until = 0
     for offset in range(4, len(data) - 8):
-        if data[offset - 1] != 0:
+        # A record's own number and text cannot start another record.  The
+        # number's low byte followed by text otherwise reads as a second,
+        # truncated record one byte later (source 1 "BIRTH CERTIFICATE"
+        # also matched as source 322 "IRTH CERTIFICATE").
+        if offset < claimed_until or data[offset - 1] != 0:
             continue
         source_id = int.from_bytes(data[offset:offset + 4], "big")
         if not 1 <= source_id <= 1000:
@@ -137,6 +142,7 @@ def parse_lookup_file(path, trim_location_control=False):
         end = first
         while end < len(data) and 32 <= data[end] < 127:
             end += 1
+        claimed_until = end
         field = data[first:end]
         # BKLOCATE occasionally stores a printable control byte immediately
         # before the NUL terminator.  It must not become part of the place
