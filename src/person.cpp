@@ -535,6 +535,49 @@ void PrintFixedRecordSourceRefs(const std::vector<unsigned char>& record)
 	}
 }
 
+void PrintQuotedField(const std::vector<unsigned char>& record,
+	std::size_t offset, std::size_t length)
+{
+	std::string text;
+	for ( std::size_t i = 0U; i < length; ++i )
+		text += Printable(record[offset + i])
+			? static_cast<char>(record[offset + i]) : '?';
+	const std::size_t first = text.find_first_not_of(' ');
+	const std::size_t last = text.find_last_not_of(' ');
+	text = first == std::string::npos ? std::string()
+		: text.substr(first, last - first + 1U);
+	std::cout << '"';
+	for ( std::string::const_iterator ch = text.begin(); ch != text.end(); ++ch ) {
+		if ( *ch == '\\' || *ch == '"' ) std::cout << '\\';
+		std::cout << *ch;
+	}
+	std::cout << '"';
+}
+
+void PrintFixedRecordCitations(const std::vector<unsigned char>& record)
+{
+	/* After the five source numbers come five 20-character citation fields,
+	 * one per date/location slot: 18 characters of "page" detail and a
+	 * 2-character "quality of data" code, as BK5's CHANGES.DOC describes
+	 * and as in BKMARR family records.  Validated on all 526 named person
+	 * records: 225 citations carry a quality code (0-3, plus one 4) and 22
+	 * carry page detail. */
+	const std::size_t citations = 0x99U;
+	const std::size_t length = 20U;
+	const std::size_t detail = 18U;
+	std::cout << " source_details=";
+	for ( std::size_t slot = 0U; slot < 5U; ++slot ) {
+		if ( slot ) std::cout << ',';
+		PrintQuotedField(record, citations + slot * length, detail);
+	}
+	std::cout << " source_quality=";
+	for ( std::size_t slot = 0U; slot < 5U; ++slot ) {
+		if ( slot ) std::cout << ',';
+		PrintQuotedField(record, citations + slot * length + detail,
+			length - detail);
+	}
+}
+
 void PrintFixedRecordLocationRefs(const std::vector<unsigned char>& record)
 {
 	std::cout << " location_refs=";
@@ -799,6 +842,7 @@ int TReadPersons::DumpIdRecords() const
 				PrintFixedRecordNotes(record);
 				PrintFixedRecordLocationRefs(record);
 				PrintFixedRecordSourceRefs(record);
+				PrintFixedRecordCitations(record);
 				PrintFixedRecordDates(record);
 				std::cout << '\n';
 			} else {
@@ -845,6 +889,7 @@ int TReadPersons::DumpIdRecords() const
 			PrintFixedRecordNotes(record);
 			PrintFixedRecordLocationRefs(record);
 			PrintFixedRecordSourceRefs(record);
+			PrintFixedRecordCitations(record);
 			PrintFixedRecordDates(record);
 			std::cout << " source=unindexed-fixed-scan\n";
 			unindexed++;
@@ -970,6 +1015,7 @@ int TReadPersons::TraceFixedAddress(std::uint32_t address) const
 	PrintFixedRecordNotes(expanded);
 	PrintFixedRecordLocationRefs(expanded);
 	PrintFixedRecordSourceRefs(expanded);
+	PrintFixedRecordCitations(expanded);
 	PrintFixedRecordDates(expanded);
 	std::cout << '\n';
 	PrintTraceBytes(expanded, 0U,

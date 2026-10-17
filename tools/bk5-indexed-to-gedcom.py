@@ -11,11 +11,14 @@ import subprocess
 import sys
 
 
+CITATION_FIELDS = ",".join([r'"((?:[^"\\]|\\.)*)"'] * 5)
 PERSON_RE = re.compile(
     r'^PERSON_ID_RECORD id=(\d+) address=0x([0-9a-f]+) status=decoded '
     r'decoded_length=(\d+) name="(.*?)" sex=(.) families=([^ ]*) '
     r'occupation="(.*?)" notes="(.*?)" location_refs=([^ ]*) '
     r'source_refs=([^ ]*) '
+    r'source_details=' + CITATION_FIELDS + r' '
+    r'source_quality=' + CITATION_FIELDS + r' '
     r'dates=(.*?)(?: source=([^ ]+))?$'
 )
 RAW_PERSON_RE = re.compile(
@@ -87,7 +90,11 @@ def parse_people(text):
     for line in text.splitlines():
         match = PERSON_RE.match(line)
         if match:
-            person_id, address, length, name, sex, families, occupation, notes, location_refs, source_refs, dates, source = match.groups()
+            groups = match.groups()
+            person_id, address, length, name, sex, families, occupation, notes, location_refs, source_refs = groups[:10]
+            source_details = [unquote(value) for value in groups[10:15]]
+            source_quality = [unquote(value) for value in groups[15:20]]
+            dates, source = groups[20:22]
             refs = [] if not families else [int(value, 16)
                                             for value in families.split(',')]
             date_values = {}
@@ -107,6 +114,8 @@ def parse_people(text):
                                   if value],
                 "source_refs": [int(value) for value in source_refs.split(',')
                                 if value],
+                "source_details": source_details,
+                "source_quality": source_quality,
                 "families": refs,
                 "dates": date_values,
                 "source": source or "indexed-key0",
@@ -289,6 +298,32 @@ def emit_family_status(ceremony, end_code, end_year):
     elif end_year:
         emit_note("BK5 marriage end year: {} (no reason recorded).".format(
             end_year))
+
+
+def emit_citation(slot, source_id, detail, quality, sources, label="BK5"):
+    """Emit one BK5 citation slot as SOUR with PAGE and QUAY.
+
+    BK5 citations hold a source number, an 18-character "page" detail and
+    a "quality of data" code.  GEDCOM QUAY allows only 0-3, so any other
+    code, and any page or quality entered without a source, is kept as a
+    note instead.
+    """
+    if not source_id:
+        if detail or quality:
+            emit_note("{} citation slot {} without source: page={!r} "
+                      "quality={!r}".format(label, slot, detail, quality))
+        return
+    if source_id in sources:
+        emit("1 SOUR @S{}@".format(source_id))
+        if detail:
+            emit("2 PAGE {}".format(detail))
+        if quality in ("0", "1", "2", "3"):
+            emit("2 QUAY {}".format(quality))
+        elif quality:
+            emit_note("{} citation slot {}: quality code {!r} is outside "
+                      "GEDCOM's 0-3 range".format(label, slot, quality))
+    emit_note("{} source slot {} ({}): {}".format(
+        label, slot, source_id, sources.get(source_id, "[not decoded]")))
 
 
 def family_tag(family_id):
@@ -494,13 +529,9 @@ def main():
             emit_note("BK5 location slot {} ({}): {}".format(
                 slot, location_id, description))
         for slot, source_id in enumerate(person["source_refs"], 1):
-            if not source_id:
-                continue
-            description = sources.get(source_id, "[not decoded]")
-            if source_id in sources:
-                emit("1 SOUR @S{}@".format(source_id))
-            emit_note("BK5 source slot {} ({}): {}".format(
-                slot, source_id, description))
+            emit_citation(slot, source_id,
+                          person["source_details"][slot - 1],
+                          person["source_quality"][slot - 1], sources)
         for slot, offset in enumerate(DATE_SLOTS):
             date = person["dates"].get(offset)
             tag = DATE_TAGS[slot]
@@ -595,24 +626,11 @@ def main():
         if second_date or second_location_id:
             emit_note("BK5 family second date/location slot: {} {}".format(
                 gedcom_date(second_date), second_location_id))
-        for slot, source_id in enumerate(family["source_refs"]):
-            detail = family["source_details"][slot]
-            quality = family["source_quality"][slot]
-            if not source_id:
-                if detail or quality:
-                    emit_note("BK5 family citation slot {} without source: "
-                              "detail={!r} quality={!r}".format(
-                                  slot + 1, detail, quality))
-                continue
-            if source_id in sources:
-                emit("1 SOUR @S{}@".format(source_id))
-                if detail:
-                    emit("2 PAGE {}".format(detail))
-                if quality in ("0", "1", "2", "3"):
-                    emit("2 QUAY {}".format(quality))
-            emit_note("BK5 family source slot {} ({}): {}".format(
-                slot + 1, source_id,
-                sources.get(source_id, "[not decoded]")))
+        for slot, source_id in enumerate(family["source_refs"], 1):
+            emit_citation(slot, source_id,
+                          family["source_details"][slot - 1],
+                          family["source_quality"][slot - 1], sources,
+                          label="BK5 family")
         if family["status"]:
             emit_note("BK5 family status field (ceremony, end code, end "
                       "year): {}".format(family["status"]))
