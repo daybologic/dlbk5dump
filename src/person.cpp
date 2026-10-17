@@ -528,6 +528,10 @@ void PrintFixedRecordFamilies(const std::vector<unsigned char>& record)
 	std::vector<std::uint32_t> families;
 	for ( std::size_t offset = 54U; offset + 9U <= record.size(); ++offset ) {
 		if ( record[offset] != 'M' && record[offset] != 'F' ) continue;
+		/* The sex byte follows the padded occupation field.  Do not accept
+		 * an M/F that is part of an occupation such as OFF or FISH. */
+		if ( offset > 54U && Printable(record[offset - 1U])
+			&& record[offset - 1U] != ' ' ) continue;
 		sex = static_cast<char>(record[offset]);
 		const std::uint32_t first = BigEndian32(record, offset + 1U);
 		const std::uint32_t second = BigEndian32(record, offset + 5U);

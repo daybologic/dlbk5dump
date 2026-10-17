@@ -230,6 +230,21 @@ def family_tag(family_id):
     return "@F{:x}@".format(family_id)
 
 
+def family_roles(person_id, refs, marriages):
+    """Assign family roles using decoded marriage spouses where available."""
+    result = []
+    for index, family_id in enumerate(refs):
+        if not family_id:
+            continue
+        marriage = marriages.get(family_id)
+        if marriage is not None:
+            role = "FAMS" if person_id in marriage["spouses"] else "FAMC"
+        else:
+            role = "FAMC" if index == 0 else "FAMS"
+        result.append((family_id, role))
+    return result
+
+
 DATE_SLOTS = ("0x111", "0x120", "0x12f", "0x13e", "0x14d")
 DATE_TAGS = ("BIRT", "BAPM", "DEAT", "BURI", None)
 
@@ -331,13 +346,14 @@ def main():
             if offset not in DATE_SLOTS:
                 emit("1 NOTE BK5 date at {}: {}".format(offset, date))
         refs = person["families"]
-        if refs and refs[0]:
-            emit("1 FAMC {}".format(family_tag(refs[0])))
-        if len(refs) >= 2 and refs[1]:
-            emit("1 FAMS {}".format(family_tag(refs[1])))
-        if len(refs) > 2:
+        roles = family_roles(person_id, refs, marriages)
+        for family_id, role in roles:
+            emit("1 {} {}".format(role, family_tag(family_id)))
+        if len(roles) < len([value for value in refs if value]):
             emit("1 NOTE Additional BK5 family references: {}".format(
-                ", ".join(family_tag(value) for value in refs[2:] if value)))
+                ", ".join(family_tag(value) for value in refs
+                          if value and family_tag(value) not in
+                          {family_tag(family_id) for family_id, _ in roles})))
         for family_id in marriage_families_by_person.get(person_id, []):
             if len(refs) < 2 or refs[1] != family_id:
                 emit("1 FAMS {}".format(family_tag(family_id)))
@@ -367,10 +383,9 @@ def main():
             emit("1 NOTE BK5 raw date at {}: {}".format(date_offset, date))
         refs = person["families"]
         if person["person_id"] is not None and refs:
-            if refs[0]:
-                emit("1 FAMC {}".format(family_tag(refs[0])))
-            if len(refs) >= 2 and refs[1]:
-                emit("1 FAMS {}".format(family_tag(refs[1])))
+            for family_id, role in family_roles(person["person_id"],
+                                                 refs, marriages):
+                emit("1 {} {}".format(role, family_tag(family_id)))
             for family_id in refs[2:]:
                 if family_id:
                     emit("1 NOTE Additional BK5 raw family reference {}".format(
@@ -398,18 +413,24 @@ def main():
         children = []
         for person_id, person in sorted(people.items()):
             refs = person["families"]
-            if len(refs) >= 2 and refs[1] == family_id:
-                spouses.append((person_id, person["sex"]))
-            if refs and refs[0] == family_id:
-                children.append(person_id)
+            for reference, role in family_roles(person_id, refs, marriages):
+                if reference != family_id:
+                    continue
+                if role == "FAMS":
+                    spouses.append((person_id, person["sex"]))
+                elif role == "FAMC":
+                    children.append(person_id)
         for person in raw_unmerged:
             refs = person["families"]
-            if (person["person_id"] is not None
-                    and len(refs) >= 2 and refs[1] == family_id):
-                spouses.append((person["person_id"], person["sex"]))
-            if (person["person_id"] is not None
-                    and refs and refs[0] == family_id):
-                children.append(person["person_id"])
+            if person["person_id"] is not None:
+                for reference, role in family_roles(person["person_id"],
+                                                     refs, marriages):
+                    if reference != family_id:
+                        continue
+                    if role == "FAMS":
+                        spouses.append((person["person_id"], person["sex"]))
+                    elif role == "FAMC":
+                        children.append(person["person_id"])
         for person_id, sex in spouses:
             emit("1 {} @I{}@".format("HUSB" if sex == "M" else "WIFE"
                                       if sex == "F" else "NOTE", person_id))
