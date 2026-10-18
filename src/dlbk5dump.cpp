@@ -7,6 +7,7 @@
 //#include <map>
 
 #include "lookup.hpp"
+#include "gedcom.hpp"
 #include "marriage.hpp"
 #include "person.hpp"
 
@@ -54,11 +55,17 @@ int main(int argc, char **argv)
 	TReadLookups lookups;
 	TReadMarriages marriages;
 	TReadPersons persons;
+	const bool gedcom = argc >= 2 && strcmp(argv[1], "--gedcom") == 0;
+	if ( gedcom && !(argc == 2 || (argc == 3 && strcmp(argv[2], "--clean") == 0)) ) {
+		fprintf(stderr, "Usage: %s --gedcom [--clean]\n", argv[0]);
+		return 2;
+	}
 
 	if ( !CheckFiles() ) {
-		puts("Error: Files don\'t exist");
+		fprintf(stderr, "Error: Files don't exist\n");
 		return 1;
 	}
+	if ( gedcom ) return ExportGedcom(argc == 3);
 	if ( argc == 3 && strcmp(argv[1], "--person") == 0 ) {
 		return persons.Find(argv[2]);
 	}
@@ -192,7 +199,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();

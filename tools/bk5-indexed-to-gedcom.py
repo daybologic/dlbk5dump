@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Export the currently decoded BK5 key-0 records as a cautious GEDCOM.
+"""Reference exporter for the native dlbk5dump --gedcom mode.
+
+Retained for byte-for-byte regression comparisons via make check-gedcom.
+Normal exports use C++ and do not require Python.
 
 This is intentionally an intermediate export.  It does not discard the
 diagnostic source address or unknown date slots, and it states that raw-only

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a small C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; marriage-record parsing is split between `src/marriage.cpp` and `src/marriage.hpp`. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `README` contains the project’s brief runtime requirement. There is currently no separate test, asset, or generated-output directory.
+This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python reference exporter and independent audit tools.
 
 ## Build, Test, and Development Commands
 
@@ -23,15 +23,30 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --dump-sources      # decode all BKSOURCE.DT5 source records
 ./dlbk5dump --dump-locations    # decode all BKLOCATE.DT5 location records
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
-make gedcom > indexed.ged
+./dlbk5dump --gedcom           # native C++ audit GEDCOM on stdout
+./dlbk5dump --gedcom --clean   # native C++ GEDCOM without extraction notes
+make -s gedcom > indexed.ged   # -s keeps compiler commands out of the GEDCOM
 make gedcom-file
 make gedcom-clean-file          # indexed-clean.ged, without extraction notes
 make audit
+make check-gedcom              # byte-for-byte C++/Python parity, both modes
 ```
 
-The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. No automated test suite is currently provided; use the bundled BK5 data for smoke tests and inspect representative output.
+The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
 
-`bk5-indexed-to-gedcom.py` is an intermediate export only. It preserves BK5 source addresses and unresolved date slots, and includes raw-only records under synthetic `@IR...@` identifiers. Their family roles and encoded names still require reconciliation before the GEDCOM is complete.
+`--gedcom` is a standalone C++ export; it never invokes Python or subprocesses.
+It captures the existing person/family/lookup dump methods in memory so all
+binary decoding remains shared. The diagnostic record formats are therefore
+an internal export contract: update the native adapter and Python reference
+together if those formats change. `tools/bk5-indexed-to-gedcom.py` remains the
+reference implementation for `make check-gedcom`; Python is needed only for
+this comparison and the independent audits. Both exporters produce an
+intermediate extraction that preserves BK5 addresses, unresolved date slots,
+and raw-only records under synthetic `@IR...@` identifiers. `--clean` omits
+extraction notes but retains genealogical notes and unresolved information.
+Keep ordering, whitespace, UTF-8 encoding, note wrapping, citations, and final
+newlines identical in both implementations. File targets replace the previous
+GEDCOM only after a successful export.
 
 Run `./tools/bk5-altkeys.py` when auditing `ALTKEYS.DT5`; preserve non-empty
 slots as unassigned data unless a person identifier is independently proven.
@@ -87,7 +102,7 @@ Match the existing C++ style: tabs for indentation, braces on the same line, and
 
 ## Testing Guidelines
 
-Before submitting changes, run `make`, `make audit`, `git diff --check`, and at least `./dlbk5dump --dump-id-records` and `./dlbk5dump --dump-marriages` from the root. Confirm missing-input behavior by running in a directory without `BK5/` only when needed; do not alter or delete the supplied legacy data. If parser behavior changes, include representative output and explain which BK5 record layout was validated.
+Before submitting changes, run `make`, `make check-gedcom`, `make audit`, `git diff --check`, and at least `./dlbk5dump --dump-id-records` and `./dlbk5dump --dump-marriages` from the root. `make check-gedcom` compares both export modes against Python with `cmp`, checks native export without executables on `PATH`, and tests CP437 text, malformed/missing inputs, and invalid arguments using temporary fixtures. For export changes, also regenerate `indexed.ged` and run the three independent GEDCOM checks listed above. Preserve a copy of the previous GEDCOM before changing export behavior; require byte equality when porting behavior unchanged. Do not alter or delete the supplied legacy data. If parser behavior changes, include representative output and explain which BK5 record layout was validated.
 
 ## Commit & Pull Request Guidelines
 

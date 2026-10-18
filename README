@@ -1,73 +1,88 @@
-This tool represents my first effort at reverse engineering family history
-databases from the BK5 program. You must have all of the relevant files
-within the current directory in order to run the code.
+dlbk5dump recovers family-history data from Brother's Keeper 5 databases.
+Build with GNU make and a C++17 compiler, then run from the repository root
+with the legacy files in BK5/. Database files are read-only inputs.
 
-Build with `make` from the repository root. The most useful current commands
-are:
+    make
+    ./dlbk5dump --gedcom > indexed.ged
+    ./dlbk5dump --gedcom --clean > indexed-clean.ged
+
+GEDCOM generation is implemented entirely in C++; Python is not required.
+The default audit export preserves extraction notes, source addresses, raw
+date slots, ALTKEYS slots and unassigned BKMAIL address-book text. --clean
+omits extraction notes and the address-book inventory while retaining
+genealogical notes, citations, event places and unresolved information.
+Both modes produce GEDCOM 5.5.1 with UTF-8 text and a submitter record.
+
+The Makefile provides the same exports:
+
+    make gedcom                 # audit GEDCOM to stdout
+    make gedcom-file            # indexed.ged
+    make gedcom-clean-file      # indexed-clean.ged
+
+File targets generate a temporary file and replace the old export only on
+success. When capturing make's stdout, use make -s gedcom > indexed.ged:
+otherwise compiler commands can appear there if a rebuild is needed. The
+direct ./dlbk5dump command always sends only GEDCOM to stdout; diagnostics
+go to stderr. --clean is accepted only after --gedcom.
+
+The Python exporter tools/bk5-indexed-to-gedcom.py is retained as a reference.
+The native exporter uses the same C++ person, family and lookup decoders
+in process, and implements the reference's formatting and ordering rules.
+To compare every output byte, including clean mode:
+
+    make check-gedcom
+
+This requires Python 3 for the reference and checks the bundled database,
+CP437 text, missing/malformed inputs, and native export with no executables
+on PATH. Comparison outputs and synthetic inputs use temporary directories;
+the existing indexed.ged and BK5 files are not modified by this check.
+Before changing export behavior, save the previous GEDCOM for comparison.
+
+Independent validation (Python 3 required):
+
+    make audit
+    ./tools/gedcom-check.py indexed.ged
+    ./tools/gedcom-roles.py indexed.ged
+    ./tools/gedcom-places.py indexed.ged
+    ./tools/bk5-ancestry.py indexed.ged --person 3 --terminals
+
+The export remains an intermediate extraction: raw-only records appear
+under synthetic @IR...@ identifiers, and ambiguous dates or references are
+retained as labelled notes. No missing person or relationship is invented.
+The ancestry tool follows explicit FAMC links only.
+
+Useful decoder commands:
 
     ./dlbk5dump --dump-id-records
+    ./dlbk5dump --dump-records
+    ./dlbk5dump --dump-families
+    ./dlbk5dump --trace-family 31
+    ./dlbk5dump --dump-sources
+    ./dlbk5dump --dump-locations
     ./dlbk5dump --dump-marriages
     ./dlbk5dump --family 0x9a
     ./tools/bk5-altkeys.py
     ./tools/bk5-mail.py
     ./tools/bk5-options.py
-    make gedcom > indexed.ged
-    make gedcom-file
-    make audit
-    ./tools/bk5-ancestry.py indexed.ged --person 3
 
-The person dump decodes the Btrieve key-0 index, then scans physical fixed
-record slots for valid person numbers missing from that index. Raw-page scans
-remain important because old or orphaned records may use a different view of
-the variable data; no GEDCOM export is considered complete until both sources
-have been reconciled. The current GEDCOM command also includes raw-only
-records under synthetic identifiers, so it is an intermediate extraction
-rather than the final GEDCOM.
+The person decoder reads the key-0 index, then scans physical fixed slots
+for valid person numbers missing from the index. Raw-page scans preserve a
+second view of the variable data, including old or orphaned records.
 
-The exporter preserves all five location and source slot numbers from fixed
-person records and resolves them from `BKLOCATE.DT5` and `BKSOURCE.DT5` as
-audit notes. The empirically validated date-slot order is BIRT, BAPM, DEAT,
-BURI, and other; the first four slots receive matching `PLAC` values when
-present. Raw slot notes remain so the event mapping can be audited.
+Family membership comes from the 167 decoded BKMARR.DT5 family records,
+including spouse and child IDs. Person references not confirmed by that
+table remain notes. Marriage dates, places, source citations, ceremony
+status and documented divorce/annulment/separation codes are exported.
+--dump-marriages is an older diagnostic date scan; --dump-families is the
+record-aware family decoder. --dump-relations reports unvalidated B-tree
+pointer candidates and must not be used as genealogy relationships.
 
-The ancestry audit follows only explicit `FAMC` links in that export. It is
-useful for separating the oldest linked ancestor from older, disconnected
-records and prints the BK5 family identifiers and marriage dates used by each
-link. Add `--terminals` to list the linked ancestors for whom no further
-parent-family record is present.
+Person date/location slots are birth, baptism, death, burial and other.
+Slots 1-4 produce matching events with dates and/or places; slot 5 and raw
+dates of unproven type remain notes. BKSOURCE descriptions become standalone
+SOUR records. Person citations, with PAGE and QUAY, attach to the matching
+event when exported, otherwise to the person; family citations stay on the
+family. All five person source/location slot notes remain in audit mode.
 
-Dates found in raw variable-page person records are retained as
-`BK5 raw date at ...` notes when their event type cannot be proven from the
-fixed-record layout.
-
-Marriage records without an explicit family ID are linked only when both
-spouse records independently contain the same family reference. Other
-ambiguous marriage scans are retained as header notes with their raw spouse
-references and dates.
-
-Some older BKMARR entries use a compact key immediately before the date
-instead of the normal spouse-pair header. The decoder preserves these as
-layout candidates and may attach a date only when the compact person record
-has one unambiguous FAMS reference; such links are labelled as inferred.
-
-`ALTKEYS.DT5` is also inspected as fixed 162-byte slots. Its one non-empty
-slot is retained as an unassigned GEDCOM header note because the file contains
-no person identifier tying it to an individual.
-
-Printable text in `BKMAIL.DT5` is preserved as offset-labelled, unassigned
-GEDCOM header notes because the address records contain no person IDs.
-
-`bk5-options.py` compares the active and backup option files. These files are
-configuration metadata, not person records, so they are audited separately
-and are not turned into GEDCOM individuals or relationships.
-
-Decoded `BKSOURCE.DT5` descriptions are also emitted as standalone GEDCOM
-`SOUR` records. Known source slots also produce person-level `SOUR` pointers;
-the original slot notes remain in place, and no event citation is inferred.
-
-`make audit` regenerates the intermediate GEDCOM and checks decoded date
-coverage, family-reference coverage, duplicate IDs, and dangling links.
-`make gedcom-file` writes the same export to `indexed.ged`.
-
-`--dump-relations` is diagnostic only: its pointer hits are unvalidated
-B-tree/index candidates and are not used as genealogy relationships.
+ALTKEYS and BKMAIL text stays unassigned unless ownership is independently
+proven. BKOPTION and its backup are configuration, not genealogy data.
