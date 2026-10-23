@@ -55,6 +55,7 @@ Useful decoder commands:
 
     ./dlbk5dump --dump-altkeys
     ./dlbk5dump --dump-options
+    ./dlbk5dump --dump-mail
     ./dlbk5dump --dump-id-records
     ./dlbk5dump --dump-records
     ./dlbk5dump --dump-families
@@ -63,7 +64,6 @@ Useful decoder commands:
     ./dlbk5dump --dump-locations
     ./dlbk5dump --dump-marriages
     ./dlbk5dump --family 0x9a
-    ./tools/bk5-mail.py
 
 --dump-altkeys replaces tools/bk5-altkeys.py for normal use. It needs only
 BK5/ALTKEYS.DT5 and runs entirely in C++. It checks that the file consists
@@ -101,6 +101,30 @@ line endings, whitespace, duplicate and empty keys, missing values, CP437
 text and Unicode sorting, empty files, missing inputs and invalid arguments.
 The check also runs the native flag without other database files or
 executables on PATH.
+
+--dump-mail replaces tools/bk5-mail.py for normal use. It needs only
+BK5/BKMAIL.DT5 and runs entirely in C++. Runs contain bytes 0x20-0x7e;
+all control, DEL and high bytes delimit runs. Spaces are trimmed, and only
+text of at least three characters is reported. Runs ending at EOF are kept.
+Quoting and report stdout match the Python reference byte for byte:
+
+    BKMAIL_TEXT_RUNS count=43
+
+Preserve the reference's offset convention: --dump-mail labels the offset
+immediately after the raw run, before trimming, which is its delimiter or
+EOF. GEDCOM audit notes instead label the raw run's start. The shared reader
+retains both boundaries so existing GEDCOM output is unchanged. All mail
+text stays unassigned; a similar name does not establish person ownership.
+
+Run make check-mail to compare reports and verify input bytes are unchanged.
+Fixtures cover every byte value, raw offsets, spaces, quote/backslash
+escaping, short and long runs, empty/binary-only files and EOF. The check
+also verifies execution with only BKMAIL.DT5 and no executables on PATH.
+Missing/unreadable input returns 1 with no report; native errors use concise
+stderr messages rather than Python tracebacks. Extra arguments return 2.
+The Python script remains an independent reference. make check-gedcom also
+compares synthetic mail fixtures in audit and clean mode, including raw
+start offsets and long-note wrapping.
 
 The person decoder reads the key-0 index, then scans physical fixed slots
 for valid person numbers missing from the index. Raw-page scans preserve a

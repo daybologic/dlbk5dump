@@ -92,6 +92,29 @@ fi
 	compare_exports 'CP437 fixture clean export' --clean
 )
 
+# Replace only the temporary mail symlink; never write through it to BK5/.
+test -L "$parity_dir/fixture/BK5/BKMAIL.DT5"
+unlink "$parity_dir/fixture/BK5/BKMAIL.DT5"
+printf '\000  abc  \000xy\000def' > "$parity_dir/fixture/BK5/BKMAIL.DT5"
+(
+	cd "$parity_dir/fixture"
+	compare_exports 'Mail fixture audit export'
+	# GEDCOM notes keep start offsets, unlike --dump-mail's end offsets.
+	grep -Fqx '2 CONT BKMAIL offset 0x1: abc' "$parity_dir/cpp.ged"
+	grep -Fqx '2 CONT BKMAIL offset 0xc: def' "$parity_dir/cpp.ged"
+	compare_exports 'Mail fixture clean export' --clean
+)
+{
+	printf '\200\377  short\000'
+	printf '%600s' '' | tr ' ' X
+	printf '\177  final run  '
+} > "$parity_dir/fixture/BK5/BKMAIL.DT5"
+(
+	cd "$parity_dir/fixture"
+	compare_exports 'Long mail note audit export'
+	compare_exports 'Long mail note clean export' --clean
+)
+
 # Decode errors and missing fixtures must fail with no partial GEDCOM.
 printf x >> "$parity_dir/fixture/BK5/ALTKEYS.DT5"
 if (cd "$parity_dir/fixture" && "$repo/dlbk5dump" --gedcom) > "$parity_dir/failure.ged" 2> "$parity_dir/error"; then

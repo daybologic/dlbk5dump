@@ -7,28 +7,29 @@
 | `tools/bk5-indexed-to-gedcom.py` | `./dlbk5dump --gedcom [--clean]` |
 | `tools/bk5-altkeys.py` | `./dlbk5dump --dump-altkeys` |
 | `tools/bk5-options.py` | `./dlbk5dump --dump-options` |
+| `tools/bk5-mail.py` | `./dlbk5dump --dump-mail` |
+
+Mail inspection and GEDCOM export share a reader that preserves both raw
+boundaries: the reference mail report labels each run's end offset, while
+GEDCOM notes label its start. `make check-mail` proves report parity and
+unchanged input bytes; `make check-gedcom` also covers synthetic mail inputs
+and long notes in both audit and clean modes. Mail entries remain unassigned.
 
 ## Remaining Work, in Recommended Order
 
-1. **Mail inspection — `tools/bk5-mail.py`.** Extract the scanning logic
-   already used by the native GEDCOM exporter into a shared reader. Add
-   `--dump-mail`, preserving offsets, quoted text, and summary counts. The
-   current database yields 43 text runs. Keep entries unassigned unless
-   ownership is independently proven.
-
-2. **Extraction audit — `tools/bk5-audit.py`.** Port decoded-record and date
+1. **Extraction audit — `tools/bk5-audit.py`.** Port decoded-record and date
    coverage checks, raw-date preservation, mail/ALTKEYS note coverage,
    unresolved lookups, duplicate identifiers, missing families, and dangling
    references. Preserve failure conditions and exit status. Switch
    `make audit` to the native implementation once validated, removing Python
    from the ordinary audit workflow.
 
-3. **Ancestry — `tools/bk5-ancestry.py`.** Port ancestor-tree traversal and
+2. **Ancestry — `tools/bk5-ancestry.py`.** Port ancestor-tree traversal and
    terminal-ancestor listing, preserving person selection, family identifiers,
    unresolved records, and cycle handling. Follow explicit parent-family links
    only. Establish a shared native GEDCOM reader for subsequent validators.
 
-4. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools:
+3. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools:
 
    | Python tool | Checks to preserve |
    |---|---|

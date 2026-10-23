@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, options, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
+This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, options, mail, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
 
 ## Build, Test, and Development Commands
 
@@ -24,6 +24,7 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --dump-locations    # decode all BKLOCATE.DT5 location records
 ./dlbk5dump --dump-altkeys      # inspect non-empty 162-byte ALTKEYS slots
 ./dlbk5dump --dump-options      # compare BKOPTION.DT5 with BKOPTION.BAK
+./dlbk5dump --dump-mail         # inspect unassigned BKMAIL text runs
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 ./dlbk5dump --gedcom           # native C++ audit GEDCOM on stdout
 ./dlbk5dump --gedcom --clean   # native C++ GEDCOM without extraction notes
@@ -34,6 +35,7 @@ make audit
 make check-gedcom              # byte-for-byte C++/Python parity, both modes
 make check-altkeys             # native/Python ALTKEYS parity and edge cases
 make check-options             # native/Python options parity and edge cases
+make check-mail                # mail report/input parity and edge cases
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -60,8 +62,17 @@ Keep `tools/bk5-altkeys.py` as the independent reference and run
 `make check-altkeys` after changing the reader or shared text helpers. The
 check covers all CP437 bytes, quoting, whitespace, slot counts and boundaries,
 empty/missing/malformed input, and execution without Python on `PATH`.
-Run `./tools/bk5-mail.py` to inspect the unassigned address-book text in
-`BKMAIL.DT5`; do not attach it to a person by name similarity alone.
+Run `./dlbk5dump --dump-mail` to inspect unassigned address-book text; it
+needs only `BK5/BKMAIL.DT5`. Keep `tools/bk5-mail.py` as the independent
+reference and run `make check-mail` after changing mail handling. The reader
+is shared with GEDCOM export. Preserve the strict printable byte range
+0x20-0x7e, space trimming, minimum trimmed length of three, EOF flushing,
+Python-style quoting, and report ordering. The legacy mail report labels
+each run's end offset (delimiter or EOF), while GEDCOM notes label its start;
+retain both raw boundaries before trimming. Never attach mail text to a
+person by name similarity alone. Tests compare stdout and successful stderr,
+verify input bytes are unchanged, and check file errors and invalid arguments.
+Native file errors use concise stderr messages rather than Python tracebacks.
 Run `./dlbk5dump --dump-options` to compare `BKOPTION.DT5` with
 `BKOPTION.BAK`; this flag needs only those two files. Configuration
 differences must not be interpreted as genealogy records. Keep
