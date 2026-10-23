@@ -38,6 +38,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 //#include <map>
 
+#include "altkeys.hpp"
 #include "lookup.hpp"
 #include "gedcom.hpp"
 #include "marriage.hpp"
@@ -91,6 +92,14 @@ int main(int argc, char **argv)
 	if ( gedcom && !(argc == 2 || (argc == 3 && strcmp(argv[2], "--clean") == 0)) ) {
 		fprintf(stderr, "Usage: %s --gedcom [--clean]\n", argv[0]);
 		return 2;
+	}
+	if ( argc >= 2 && strcmp(argv[1], "--dump-altkeys") == 0 ) {
+		if ( argc != 2 ) {
+			fprintf(stderr, "Usage: %s --dump-altkeys\n", argv[0]);
+			return 2;
+		}
+		// Like the original ALTKEYS tool, this needs only ALTKEYS.DT5.
+		return TReadAltKeys().Dump();
 	}
 
 	if ( !CheckFiles() ) {
@@ -231,7 +240,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
