@@ -54,6 +54,7 @@ The ancestry tool follows explicit FAMC links only.
 Useful decoder commands:
 
     ./dlbk5dump --dump-altkeys
+    ./dlbk5dump --dump-options
     ./dlbk5dump --dump-id-records
     ./dlbk5dump --dump-records
     ./dlbk5dump --dump-families
@@ -63,7 +64,6 @@ Useful decoder commands:
     ./dlbk5dump --dump-marriages
     ./dlbk5dump --family 0x9a
     ./tools/bk5-mail.py
-    ./tools/bk5-options.py
 
 --dump-altkeys replaces tools/bk5-altkeys.py for normal use. It needs only
 BK5/ALTKEYS.DT5 and runs entirely in C++. It checks that the file consists
@@ -80,6 +80,27 @@ to compare outputs byte for byte on the bundled file and temporary fixtures
 covering every CP437 byte, control/quote escaping, whitespace, full and empty
 slots, and invalid or missing input. The check also verifies that the native
 flag works without other database files or executables on PATH.
+
+--dump-options replaces tools/bk5-options.py for normal use. It compares
+BK5/BKOPTION.DT5 with BK5/BKOPTION.BAK using only those two files and runs
+entirely in C++. Records are separated by CR, LF or CRLF, decoded as CP437,
+and stripped of trailing whitespace. Each record containing '=' is split at
+the first '='; leading spaces and spaces in keys are preserved. Duplicate
+keys keep the last value. Differences are printed in Unicode key order,
+using <missing> for absent keys, followed by counts. For this database:
+
+    BKOPTION_SUMMARY active_keys=103 backup_keys=103 differences=8
+
+A completed comparison exits successfully even when differences exist.
+Missing/unreadable input returns status 1; invalid arguments return 2.
+These are configuration differences, not genealogy records.
+
+The Python script remains an independent reference. Run make check-options
+to compare output on the bundled files and temporary fixtures covering
+line endings, whitespace, duplicate and empty keys, missing values, CP437
+text and Unicode sorting, empty files, missing inputs and invalid arguments.
+The check also runs the native flag without other database files or
+executables on PATH.
 
 The person decoder reads the key-0 index, then scans physical fixed slots
 for valid person numbers missing from the index. Raw-page scans preserve a

@@ -42,6 +42,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "lookup.hpp"
 #include "gedcom.hpp"
 #include "marriage.hpp"
+#include "options.hpp"
 #include "person.hpp"
 
 using namespace std;
@@ -100,6 +101,14 @@ int main(int argc, char **argv)
 		}
 		// Like the original ALTKEYS tool, this needs only ALTKEYS.DT5.
 		return TReadAltKeys().Dump();
+	}
+
+	if ( argc >= 2 && strcmp(argv[1], "--dump-options") == 0 ) {
+		if ( argc != 2 ) {
+			fprintf(stderr, "Usage: %s --dump-options\n", argv[0]);
+			return 2;
+		}
+		return TReadOptions().Dump();
 	}
 
 	if ( !CheckFiles() ) {
@@ -240,7 +249,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--dump-options|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
