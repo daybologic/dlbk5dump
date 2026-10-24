@@ -67,12 +67,35 @@ nonfatal counts, file/stdin input, Unicode and line endings, malformed or
 missing inputs, and execution without other executables on PATH. Python
 is needed only for comparison with the retained reference.
 
-Independent validation and ancestry inspection (Python 3 required):
+Ancestry inspection is native C++ and needs only the named GEDCOM file:
+
+    ./dlbk5dump --ancestry indexed.ged --person 3
+    ./dlbk5dump --ancestry indexed.ged --person 3 --terminals
+    make check-ancestry
+
+Person 3 is the default; person IDs are preserved as text, including synthetic
+IDs such as R139096. Follow only explicit FAMC links. Tree output retains
+unresolved people/families and suppresses revisits using one shared visited
+set, including repeated ancestors reached by separate branches. Terminal
+mode lists reachable people with no resolved parent family; an existing
+family with no parents contributes no terminal person. Names and dates are
+reported as stored, without inferring new relationships.
+
+Keep tools/bk5-ancestry.py as the independent reference. make check-ancestry
+compares both modes for every exported individual and fixtures for cycles,
+missing links, duplicate records, Unicode and line endings, including native
+execution without BK5 files or other executables on PATH. The shared reader
+in src/gedcom_reader.cpp preserves input order and CR/LF/CRLF handling.
+Input errors return 1; absent people and invalid arguments return 2. Native
+diagnostics/help use the native command name; option names must be complete
+(Python argparse also accepts unambiguous abbreviations). No Python or
+subprocesses are used during native ancestry inspection.
+
+Independent validation (Python 3 required):
 
     ./tools/gedcom-check.py indexed.ged
     ./tools/gedcom-roles.py indexed.ged
     ./tools/gedcom-places.py indexed.ged
-    ./tools/bk5-ancestry.py indexed.ged --person 3 --terminals
 
 The export remains an intermediate extraction: raw-only records appear
 under synthetic @IR...@ identifiers, and ambiguous dates or references are

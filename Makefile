@@ -32,11 +32,11 @@ CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 
 TARGET  := dlbk5dump
-SOURCES := src/altkeys.cpp src/audit.cpp src/btrieve.cpp src/diagnostic.cpp src/dlbk5dump.cpp src/gedcom.cpp \
+SOURCES := src/altkeys.cpp src/ancestry.cpp src/audit.cpp src/btrieve.cpp src/diagnostic.cpp src/dlbk5dump.cpp src/gedcom.cpp src/gedcom_reader.cpp \
 	src/lookup.cpp src/mail.cpp src/marriage.cpp src/options.cpp src/person.cpp src/text.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys check-options check-mail check-audit
+.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys check-options check-mail check-audit check-ancestry
 
 all: $(TARGET)
 
@@ -60,6 +60,9 @@ audit: $(TARGET)
 
 check-audit: $(TARGET)
 	@sh tools/check-audit.sh
+
+check-ancestry: $(TARGET)
+	@sh tools/check-ancestry.sh
 
 check-gedcom: $(TARGET)
 	@sh tools/check-gedcom.sh
