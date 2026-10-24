@@ -39,6 +39,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //#include <map>
 
 #include "altkeys.hpp"
+#include "ancestry.hpp"
 #include "audit.hpp"
 #include "lookup.hpp"
 #include "gedcom.hpp"
@@ -88,6 +89,7 @@ static bool CheckFiles(bool quiet)
 //---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
+	if ( argc >= 2 && strcmp(argv[1], "--ancestry") == 0 ) return RunAncestry(argc - 2, argv + 2);
 	TReadLookups lookups;
 	TReadMarriages marriages;
 	TReadPersons persons;
