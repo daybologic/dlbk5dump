@@ -8,6 +8,7 @@
 | `tools/bk5-altkeys.py` | `./dlbk5dump --dump-altkeys` |
 | `tools/bk5-options.py` | `./dlbk5dump --dump-options` |
 | `tools/bk5-mail.py` | `./dlbk5dump --dump-mail` |
+| `tools/bk5-audit.py` | `./dlbk5dump --audit [GEDCOM]` (stdin when omitted) |
 
 Mail inspection and GEDCOM export share a reader that preserves both raw
 boundaries: the reference mail report labels each run's end offset, while
@@ -15,21 +16,23 @@ GEDCOM notes label its start. `make check-mail` proves report parity and
 unchanged input bytes; `make check-gedcom` also covers synthetic mail inputs
 and long notes in both audit and clean modes. Mail entries remain unassigned.
 
+`make audit` now exports and audits entirely in C++. `make check-audit`
+compares report bytes and exit statuses with the retained Python reference,
+including failure cases and nonfatal counters. The audit shares the person
+dump capture, Unicode text helpers and mail reader with the exporter. It
+preserves the exact-one-ALTKEYS-note requirement; duplicate IDs and decoder
+failures remain report-only. Native errors are concise and invalid arguments
+return 2; UTF-8 is required on both file input and stdin (Python's stdin
+decoding depends on its runtime environment).
+
 ## Remaining Work, in Recommended Order
 
-1. **Extraction audit — `tools/bk5-audit.py`.** Port decoded-record and date
-   coverage checks, raw-date preservation, mail/ALTKEYS note coverage,
-   unresolved lookups, duplicate identifiers, missing families, and dangling
-   references. Preserve failure conditions and exit status. Switch
-   `make audit` to the native implementation once validated, removing Python
-   from the ordinary audit workflow.
-
-2. **Ancestry — `tools/bk5-ancestry.py`.** Port ancestor-tree traversal and
+1. **Ancestry — `tools/bk5-ancestry.py`.** Port ancestor-tree traversal and
    terminal-ancestor listing, preserving person selection, family identifiers,
    unresolved records, and cycle handling. Follow explicit parent-family links
    only. Establish a shared native GEDCOM reader for subsequent validators.
 
-3. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools:
+2. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools:
 
    | Python tool | Checks to preserve |
    |---|---|

@@ -35,6 +35,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace BK5Text {
 // Match the reference's CP437 decoding, Unicode whitespace, and quoted text.
@@ -42,6 +43,9 @@ std::string Cp437(const std::string& value);
 std::size_t WhitespaceWidth(const std::string& value, std::size_t offset);
 std::string RStrip(std::string value);
 std::string Strip(std::string value);
+std::vector<std::string> Words(const std::string& value);
+// Split Unicode line boundaries, retaining one empty field for empty notes.
+std::vector<std::string> TextLines(const std::string& value);
 std::string PythonRepr(const std::string& value);
 }
 

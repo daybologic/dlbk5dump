@@ -32,11 +32,11 @@ CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 
 TARGET  := dlbk5dump
-SOURCES := src/altkeys.cpp src/btrieve.cpp src/dlbk5dump.cpp src/gedcom.cpp \
+SOURCES := src/altkeys.cpp src/audit.cpp src/btrieve.cpp src/diagnostic.cpp src/dlbk5dump.cpp src/gedcom.cpp \
 	src/lookup.cpp src/mail.cpp src/marriage.cpp src/options.cpp src/person.cpp src/text.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys check-options check-mail
+.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys check-options check-mail check-audit
 
 all: $(TARGET)
 
@@ -56,7 +56,10 @@ gedcom-clean-file: $(TARGET)
 		mv -f "$$gedcom_tmp" indexed-clean.ged
 
 audit: $(TARGET)
-	@./dlbk5dump --gedcom | ./tools/bk5-audit.py
+	@./dlbk5dump --gedcom | ./dlbk5dump --audit
+
+check-audit: $(TARGET)
+	@sh tools/check-audit.sh
 
 check-gedcom: $(TARGET)
 	@sh tools/check-gedcom.sh

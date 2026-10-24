@@ -39,6 +39,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //#include <map>
 
 #include "altkeys.hpp"
+#include "audit.hpp"
 #include "lookup.hpp"
 #include "gedcom.hpp"
 #include "mail.hpp"
@@ -48,9 +49,9 @@ POSSIBILITY OF SUCH DAMAGE.
 
 using namespace std;
 //---------------------------------------------------------------------------
-static bool CheckFiles(void);
+static bool CheckFiles(bool quiet = false);
 //---------------------------------------------------------------------------
-static bool CheckFiles()
+static bool CheckFiles(bool quiet)
 {
 	const char *const files[] = {
 		"ALTKEYS.DT5",
@@ -73,7 +74,7 @@ static bool CheckFiles()
 			unsigned int ki = 0U;
 			while ( knownPtr = files[ki++] ) {
 				if ( strcmp(knownPtr, dbFnEnt->d_name) == 0 ) {
-					fprintf(stderr, "DEBUG: Seen %s\n", dbFnEnt->d_name);
+					if ( !quiet ) fprintf(stderr, "DEBUG: Seen %s\n", dbFnEnt->d_name);
 					seenCount++;
 					break;
 				}
@@ -90,6 +91,11 @@ int main(int argc, char **argv)
 	TReadLookups lookups;
 	TReadMarriages marriages;
 	TReadPersons persons;
+	const bool audit = argc >= 2 && strcmp(argv[1], "--audit") == 0;
+	if ( audit && (argc > 3 || (argc == 3 && strncmp(argv[2], "--", 2) == 0)) ) {
+		fprintf(stderr, "Usage: %s --audit [GEDCOM]\n", argv[0]);
+		return 2;
+	}
 	const bool gedcom = argc >= 2 && strcmp(argv[1], "--gedcom") == 0;
 	if ( gedcom && !(argc == 2 || (argc == 3 && strcmp(argv[2], "--clean") == 0)) ) {
 		fprintf(stderr, "Usage: %s --gedcom [--clean]\n", argv[0]);
@@ -120,10 +126,11 @@ int main(int argc, char **argv)
 		return TReadMail().Dump();
 	}
 
-	if ( !CheckFiles() ) {
+	if ( !CheckFiles(audit) ) {
 		fprintf(stderr, "Error: Files don't exist\n");
 		return 1;
 	}
+	if ( audit ) return argc == 2 ? AuditGedcom(std::cin) : AuditGedcomFile(argv[2]);
 	if ( gedcom ) return ExportGedcom(argc == 3);
 	if ( argc == 3 && strcmp(argv[1], "--person") == 0 ) {
 		return persons.Find(argv[2]);
@@ -258,7 +265,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--dump-options|--dump-mail|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--audit [GEDCOM]|--dump-altkeys|--dump-options|--dump-mail|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();

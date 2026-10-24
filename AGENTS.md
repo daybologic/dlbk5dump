@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, options, mail, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
+This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, options, mail, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp`; extraction auditing is in `src/audit.cpp`. Both share in-process dump capture through `src/diagnostic.cpp` and CP437, Unicode whitespace/line handling, and diagnostic quoting through `src/text.cpp`. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
 
 ## Build, Test, and Development Commands
 
@@ -28,14 +28,17 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 ./dlbk5dump --gedcom           # native C++ audit GEDCOM on stdout
 ./dlbk5dump --gedcom --clean   # native C++ GEDCOM without extraction notes
+./dlbk5dump --audit indexed.ged # compare an extraction with the BK5 inputs
+./dlbk5dump --gedcom | ./dlbk5dump --audit # stdin audit, entirely native
 make -s gedcom > indexed.ged   # -s keeps compiler commands out of the GEDCOM
 make gedcom-file
 make gedcom-clean-file          # indexed-clean.ged, without extraction notes
-make audit
+make audit                    # native export and extraction audit
 make check-gedcom              # byte-for-byte C++/Python parity, both modes
 make check-altkeys             # native/Python ALTKEYS parity and edge cases
 make check-options             # native/Python options parity and edge cases
 make check-mail                # mail report/input parity and edge cases
+make check-audit               # extraction report and exit-status parity
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -46,13 +49,30 @@ binary decoding remains shared. The diagnostic record formats are therefore
 an internal export contract: update the native adapter and Python reference
 together if those formats change. `tools/bk5-indexed-to-gedcom.py` remains the
 reference implementation for `make check-gedcom`; Python is needed only for
-this comparison and the independent audits. Both exporters produce an
-intermediate extraction that preserves BK5 addresses, unresolved date slots,
+reference comparisons and the remaining independent validators. Both
+exporters produce an intermediate extraction that preserves BK5 addresses, unresolved date slots,
 and raw-only records under synthetic `@IR...@` identifiers. `--clean` omits
 extraction notes but retains genealogical notes and unresolved information.
 Keep ordering, whitespace, UTF-8 encoding, note wrapping, citations, and final
 newlines identical in both implementations. File targets replace the previous
 GEDCOM only after a successful export.
+
+`--audit [GEDCOM]` reads a UTF-8 file or stdin and compares it with the shared
+person dumps and mail reader, without subprocesses. It needs the same DT5
+inventory as the person decoder. Keep `tools/bk5-audit.py` as the independent
+reference; run `make check-audit` after changing the audit, diagnostic formats
+or shared helpers. Preserve report bytes, sorted identifiers and failure
+conditions: missing families, dangling references, mismatched raw-date/mail
+note counts, unresolved lookups, and an ALTKEYS note count other than one.
+Duplicate IDs, ordinary date counts and undecodable-record counts are
+reported but do not alone fail. The exact-one-ALTKEYS assumption is corpus
+specific; this extraction audit is not a substitute for GEDCOM validation.
+Clean exports intentionally lack its required notes. Native file/encoding
+errors return 1 with concise stderr and no partial report; invalid arguments
+return 2. Both native input modes require UTF-8; Python's stdin decoding
+depends on its runtime environment. Tests compare file/stdin input, every
+failure condition, nonfatal counters, Unicode/line endings, input errors and
+native execution with no executables on `PATH`, using temporary fixtures.
 
 Run `./dlbk5dump --dump-altkeys` when auditing `ALTKEYS.DT5`; preserve
 non-empty slots as unassigned data unless a person identifier is independently

@@ -102,6 +102,44 @@ std::string Strip(std::string value)
 	return value.substr(start);
 }
 
+std::vector<std::string> Words(const std::string& value)
+{
+	std::vector<std::string> result;
+	std::size_t start = 0;
+	for ( std::size_t offset = 0; offset <= value.size(); ) {
+		const std::size_t width = WhitespaceWidth(value, offset);
+		if ( width || offset == value.size() ) {
+			if ( offset > start ) result.push_back(value.substr(start, offset - start));
+			if ( offset == value.size() ) break;
+			offset += width;
+			start = offset;
+		} else ++offset;
+	}
+	return result;
+}
+
+std::vector<std::string> TextLines(const std::string& value)
+{
+	std::vector<std::string> result;
+	std::size_t start = 0;
+	for ( std::size_t offset = 0; offset < value.size(); ) {
+		const unsigned char ch = value[offset];
+		std::size_t width = 0;
+		if ( (ch >= 10 && ch <= 13) || (ch >= 28 && ch <= 30) ) width = 1;
+		else if ( value.compare(offset, 2, u8"\u0085") == 0 ) width = 2;
+		else if ( value.compare(offset, 3, u8"\u2028") == 0
+			|| value.compare(offset, 3, u8"\u2029") == 0 ) width = 3;
+		if ( !width ) { ++offset; continue; }
+		result.push_back(value.substr(start, offset - start));
+		if ( ch == '\r' && offset + 1 < value.size() && value[offset + 1] == '\n' ) ++width;
+		offset += width;
+		start = offset;
+	}
+	if ( start < value.size() ) result.push_back(value.substr(start));
+	if ( result.empty() ) result.push_back("");
+	return result;
+}
+
 std::string PythonRepr(const std::string& value)
 {
 	// Match Python's repr for CP437 text and citation values.
