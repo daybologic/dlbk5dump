@@ -43,6 +43,8 @@ make check-audit               # extraction report and exit-status parity
 make check-ancestry            # both ancestry modes, every exported person
 ./dlbk5dump --check-gedcom indexed.ged
 make check-structure           # structural report parity; not export parity
+./dlbk5dump --gedcom-roles indexed.ged
+make check-roles               # role/chronology report and failure parity
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -132,7 +134,16 @@ Retain `tools/gedcom-check.py` independently and run `make check-structure`;
 both exports, all diagnostic groups, report limits, Counter ties, Unicode
 digits/length/escaping, malformed UTF-8, errors, and standalone execution.
 
-Run `./dlbk5dump --check-gedcom indexed.ged`, `./tools/gedcom-roles.py
+`--gedcom-roles GEDCOM` in `src/gedcom_roles.cpp` preserves the independent
+role checker's birth/baptism fallback, strict warning thresholds, first-date
+selection, unknown/zero years, ordered record replacement and permissive
+tag-prefix rules. Warnings return 0, input/pointer errors return 1, and native
+usage errors return 2. Preserve any warnings printed before a later unresolved
+pointer fails. Run `make check-roles`; keep `tools/gedcom-roles.py` independent.
+Both exports and boundary/error fixtures must match without BK5 or executables
+on PATH. Do not turn plausibility warnings into relationship corrections.
+
+Run `./dlbk5dump --check-gedcom indexed.ged`, `./dlbk5dump --gedcom-roles
 indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.
 
