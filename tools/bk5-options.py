@@ -29,7 +29,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Compare active and backup BK5 option text without interpreting settings."""
+"""Reference for dlbk5dump --dump-options; compare with make check-options."""
 
 from pathlib import Path
 
