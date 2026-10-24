@@ -41,6 +41,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "altkeys.hpp"
 #include "lookup.hpp"
 #include "gedcom.hpp"
+#include "mail.hpp"
 #include "marriage.hpp"
 #include "options.hpp"
 #include "person.hpp"
@@ -109,6 +110,14 @@ int main(int argc, char **argv)
 			return 2;
 		}
 		return TReadOptions().Dump();
+	}
+
+	if ( argc >= 2 && strcmp(argv[1], "--dump-mail") == 0 ) {
+		if ( argc != 2 ) {
+			fprintf(stderr, "Usage: %s --dump-mail\n", argv[0]);
+			return 2;
+		}
+		return TReadMail().Dump();
 	}
 
 	if ( !CheckFiles() ) {
@@ -249,7 +258,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--dump-options|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--dump-altkeys|--dump-options|--dump-mail|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();
