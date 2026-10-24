@@ -44,6 +44,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "lookup.hpp"
 #include "gedcom.hpp"
 #include "gedcom_check.hpp"
+#include "gedcom_places.hpp"
 #include "gedcom_roles.hpp"
 #include "mail.hpp"
 #include "marriage.hpp"
@@ -99,6 +100,10 @@ int main(int argc, char **argv)
 	if ( argc >= 2 && strcmp(argv[1], "--gedcom-roles") == 0 ) {
 		if ( argc != 3 ) { fprintf(stderr, "Usage: %s --gedcom-roles GEDCOM\n", argv[0]); return 2; }
 		return CheckGedcomRoles(argv[2]);
+	}
+	if ( argc >= 2 && strcmp(argv[1], "--gedcom-places") == 0 ) {
+		if ( argc != 3 ) { fprintf(stderr, "Usage: %s --gedcom-places GEDCOM\n", argv[0]); return 2; }
+		return CheckGedcomPlaces(argv[2]);
 	}
 	TReadLookups lookups;
 	TReadMarriages marriages;
@@ -277,7 +282,7 @@ int main(int argc, char **argv)
 		return persons.TraceAddress(static_cast<std::uint32_t>(address));
 	}
 	if ( argc != 1 ) {
-		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--audit [GEDCOM]|--dump-altkeys|--dump-options|--dump-mail|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--gedcom [--clean]|--audit [GEDCOM]|--ancestry GEDCOM [--person ID] [--terminals]|--check-gedcom GEDCOM|--gedcom-roles GEDCOM|--gedcom-places GEDCOM|--dump-altkeys|--dump-options|--dump-mail|--person TEXT|--dump-persons|--dump-records|--dump-id-index|--dump-id-records|--trace-id N|--trace-fixed ADDRESS|--page N|--index-page N|--dump-index|--dump-relations|--family N|--dump-marriages|--dump-families|--trace-family N|--dump-sources|--dump-locations|--trace-address N]\n", argv[0]);
 		return 2;
 	}
 	marriages.Load();

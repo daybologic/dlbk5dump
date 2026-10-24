@@ -12,6 +12,7 @@
 | `tools/bk5-ancestry.py` | `./dlbk5dump --ancestry GEDCOM [--person ID] [--terminals]` |
 | `tools/gedcom-check.py` | `./dlbk5dump --check-gedcom GEDCOM` |
 | `tools/gedcom-roles.py` | `./dlbk5dump --gedcom-roles GEDCOM` |
+| `tools/gedcom-places.py` | `./dlbk5dump --gedcom-places GEDCOM` |
 
 Mail inspection and GEDCOM export share a reader that preserves both raw
 boundaries: the reference mail report labels each run's end offset, while
@@ -45,14 +46,23 @@ unknown and zero years, ordered duplicate replacement and partial reports
 on unresolved pointers. `make check-roles` compares both exports and edge
 fixtures with the unchanged reference. Warnings remain report-only.
 
-## Remaining Work, in Recommended Order
+Place-event counting preserves exact event tags, contiguous level-2 scanning,
+PLAC/DATE prefixes and repeated-place handling. `make check-places` proves
+both-export and boundary/error parity with the unchanged reference.
 
-1. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools,
-   creating and committing a separate feature branch for each conversion:
+## Conversion Status
 
-   | Python tool | Checks to preserve |
-   |---|---|
-   | `tools/gedcom-places.py` | Counts of events with places and place-only events |
+All nine repository Python tools have native C++ equivalents; the Python
+files remain independent references. `make check-all` runs every parity suite.
+The four remaining conversions were made on successive feature branches:
+
+- `feature/cpp/bk5-ancestry/1`
+- `feature/cpp/gedcom-check/1`
+- `feature/cpp/gedcom-roles/1`
+- `feature/cpp/gedcom-places/1`
+
+Both exported GEDCOM files must remain byte-for-byte identical to the saved
+pre-conversion baselines. No relationship corrections are part of these ports.
 
 ## Conversion Requirements
 
