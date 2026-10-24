@@ -41,6 +41,8 @@ make check-mail                # mail report/input parity and edge cases
 make check-audit               # extraction report and exit-status parity
 ./dlbk5dump --ancestry indexed.ged --person 3 --terminals
 make check-ancestry            # both ancestry modes, every exported person
+./dlbk5dump --check-gedcom indexed.ged
+make check-structure           # structural report parity; not export parity
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -119,7 +121,18 @@ Input errors return 1; missing people and invalid arguments return 2.
 Native help/error text differs; use full option names rather than argparse
 abbreviations. Do not silently repair permissive reference parsing rules.
 
-Run `./tools/gedcom-check.py indexed.ged`, `./tools/gedcom-roles.py
+`--check-gedcom GEDCOM` in `src/gedcom_check.cpp` ports the structural
+checker. Preserve diagnostic ordering, output limits and Python container
+formatting. Findings return 0, matching the reference; input/read failures
+return 1 and native usage errors return 2. Only this checker uses UTF-8
+replacement decoding. `src/unicode.cpp` freezes Unicode 15.1 printable,
+word and decimal properties to avoid locale-dependent report changes.
+Retain `tools/gedcom-check.py` independently and run `make check-structure`;
+`make check-gedcom` remains the exporter parity test. Structural tests cover
+both exports, all diagnostic groups, report limits, Counter ties, Unicode
+digits/length/escaping, malformed UTF-8, errors, and standalone execution.
+
+Run `./dlbk5dump --check-gedcom indexed.ged`, `./tools/gedcom-roles.py
 indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.
 
