@@ -38,9 +38,37 @@ on PATH. Comparison outputs and synthetic inputs use temporary directories;
 the existing indexed.ged and BK5 files are not modified by this check.
 Before changing export behavior, save the previous GEDCOM for comparison.
 
-Independent validation (Python 3 required):
+Extraction auditing is also native C++:
 
-    make audit
+    make audit                      # export and audit, no Python required
+    ./dlbk5dump --audit indexed.ged  # audit an existing extraction
+    ./dlbk5dump --gedcom | ./dlbk5dump --audit
+    make check-audit                # compare with the Python reference
+
+--audit [GEDCOM] reads the named UTF-8 file or stdin when omitted, then
+compares it with the current BK5 person dumps and mail inventory. Run from
+the repository root with the same required DT5 files as the person decoder.
+It uses the shared decoders in process; no subprocesses are started. Report
+stdout and exit status match tools/bk5-audit.py on valid UTF-8 input.
+
+Status 1 means missing families, dangling references, mismatched raw-date or
+mail-note counts, an unresolved lookup, or an ALTKEYS note count other than
+one. Duplicate IDs, ordinary date counts and undecodable-record counts are
+reported but do not alone cause failure, preserving the reference policy.
+The one-ALTKEYS-note requirement is specific to this database. Clean exports
+lack the extraction notes required by this audit. Use the independent
+validators below for GEDCOM structure and genealogy plausibility checks.
+
+Native input errors return 1 with concise stderr and no partial report;
+invalid arguments return 2. Native input must be valid UTF-8 for both files
+and stdin, whereas the Python reference's stdin decoding depends on its
+runtime environment. make check-audit covers every failure condition,
+nonfatal counts, file/stdin input, Unicode and line endings, malformed or
+missing inputs, and execution without other executables on PATH. Python
+is needed only for comparison with the retained reference.
+
+Independent validation and ancestry inspection (Python 3 required):
+
     ./tools/gedcom-check.py indexed.ged
     ./tools/gedcom-roles.py indexed.ged
     ./tools/gedcom-places.py indexed.ged

@@ -29,7 +29,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Check coverage and referential integrity of the intermediate BK5 GEDCOM."""
+"""Reference for dlbk5dump --audit; compare with make check-audit."""
 
 import re
 import subprocess
