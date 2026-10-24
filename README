@@ -128,9 +128,24 @@ pointer fails. File/encoding/pointer errors return 1; native usage returns 2.
 make check-roles compares both exports and threshold/error fixtures without
 BK5 files or other executables on PATH. Keep the Python reference unchanged.
 
-Remaining independent validation (Python 3 required):
+Place-event counts are native C++:
 
-    ./tools/gedcom-places.py indexed.ged
+    ./dlbk5dump --gedcom-places indexed.ged
+    make check-places
+
+This replaces tools/gedcom-places.py, preserving its exact BIRT/BAPM/DEAT/BURI
+matching, contiguous level-2 scan, four-character PLAC/DATE prefix matching,
+and count-once treatment of repeated places. A deeper nested line ends the
+scan, even if further level-2 lines follow. It intentionally counts matching
+events in any record, as the reference does. Missing/unreadable or malformed
+UTF-8 input returns 1; native usage errors return 2. make check-places covers
+both exports, nesting/prefix boundaries, empty files, Unicode and errors.
+
+All nine retained Python tools now have native C++ equivalents. No ordinary
+export, audit, inspection or validation command needs Python or subprocesses.
+Run make check-all for every C++/Python parity suite (Python 3 required only
+for the references). New ancestry/validation modes need only their GEDCOM
+input, and the suites test them without BK5 files or executables on PATH.
 
 The export remains an intermediate extraction: raw-only records appear
 under synthetic @IR...@ identifiers, and ambiguous dates or references are

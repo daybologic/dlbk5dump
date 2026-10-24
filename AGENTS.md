@@ -45,6 +45,9 @@ make check-ancestry            # both ancestry modes, every exported person
 make check-structure           # structural report parity; not export parity
 ./dlbk5dump --gedcom-roles indexed.ged
 make check-roles               # role/chronology report and failure parity
+./dlbk5dump --gedcom-places indexed.ged
+make check-places              # place-event counting parity
+make check-all                 # every native/Python comparison suite
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -55,8 +58,8 @@ binary decoding remains shared. The diagnostic record formats are therefore
 an internal export contract: update the native adapter and Python reference
 together if those formats change. `tools/bk5-indexed-to-gedcom.py` remains the
 reference implementation for `make check-gedcom`; Python is needed only for
-reference comparisons and the remaining independent validators. Both
-exporters produce an intermediate extraction that preserves BK5 addresses, unresolved date slots,
+reference comparisons. All nine retained Python tools have native C++ modes.
+Both exporters produce an intermediate extraction that preserves BK5 addresses, unresolved date slots,
 and raw-only records under synthetic `@IR...@` identifiers. `--clean` omits
 extraction notes but retains genealogical notes and unresolved information.
 Keep ordering, whitespace, UTF-8 encoding, note wrapping, citations, and final
@@ -143,8 +146,16 @@ pointer fails. Run `make check-roles`; keep `tools/gedcom-roles.py` independent.
 Both exports and boundary/error fixtures must match without BK5 or executables
 on PATH. Do not turn plausibility warnings into relationship corrections.
 
+`--gedcom-places GEDCOM` in `src/gedcom_places.cpp` preserves the reference's
+exact event-tag matching, contiguous level-2 scan, four-character PLAC/DATE
+prefixes and count-once handling of repeated places. Deeper levels end the
+scan. It scans all record types, matching the reference. File/encoding errors
+return 1 and native usage errors return 2. Keep `tools/gedcom-places.py`
+independent and run `make check-places` for both exports and boundary/error
+fixtures. All ancestry/validation commands need only their GEDCOM input.
+
 Run `./dlbk5dump --check-gedcom indexed.ged`, `./dlbk5dump --gedcom-roles
-indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
+indexed.ged` and `./dlbk5dump --gedcom-places indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.
 
 `BKMARR.DT5` is the BK5 family table: a compressed Btrieve file keyed by
@@ -194,6 +205,12 @@ each source/build file. Keep any shebang on line 1 and place the notice
 immediately below it; retain all notice text and line breaks.
 
 ## Testing Guidelines
+
+`make check-all` runs every retained Python/native parity suite, including
+both ancestry modes for every exported individual. Python is required only
+for these references; native commands must never invoke it or subprocesses.
+Keep the reference algorithms independent and preserve a fresh byte comparison
+of both audit and clean exports against saved baselines at each conversion.
 
 Before submitting changes, run `make`, `make check-gedcom`, `make audit`, `git diff --check`, and at least `./dlbk5dump --dump-id-records` and `./dlbk5dump --dump-marriages` from the root. `make check-gedcom` compares both export modes against Python with `cmp`, checks native export without executables on `PATH`, and tests CP437 text, malformed/missing inputs, and invalid arguments using temporary fixtures. For export changes, also regenerate `indexed.ged` and run the three independent GEDCOM checks listed above. Preserve a copy of the previous GEDCOM before changing export behavior; require byte equality when porting behavior unchanged. Do not alter or delete the supplied legacy data. If parser behavior changes, include representative output and explain which BK5 record layout was validated.
 
