@@ -43,6 +43,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "audit.hpp"
 #include "lookup.hpp"
 #include "gedcom.hpp"
+#include "gedcom_check.hpp"
 #include "mail.hpp"
 #include "marriage.hpp"
 #include "options.hpp"
@@ -90,6 +91,10 @@ static bool CheckFiles(bool quiet)
 int main(int argc, char **argv)
 {
 	if ( argc >= 2 && strcmp(argv[1], "--ancestry") == 0 ) return RunAncestry(argc - 2, argv + 2);
+	if ( argc >= 2 && strcmp(argv[1], "--check-gedcom") == 0 ) {
+		if ( argc != 3 ) { fprintf(stderr, "Usage: %s --check-gedcom GEDCOM\n", argv[0]); return 2; }
+		return CheckGedcom(argv[2]);
+	}
 	TReadLookups lookups;
 	TReadMarriages marriages;
 	TReadPersons persons;

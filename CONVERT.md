@@ -10,6 +10,7 @@
 | `tools/bk5-mail.py` | `./dlbk5dump --dump-mail` |
 | `tools/bk5-audit.py` | `./dlbk5dump --audit [GEDCOM]` (stdin when omitted) |
 | `tools/bk5-ancestry.py` | `./dlbk5dump --ancestry GEDCOM [--person ID] [--terminals]` |
+| `tools/gedcom-check.py` | `./dlbk5dump --check-gedcom GEDCOM` |
 
 Mail inspection and GEDCOM export share a reader that preserves both raw
 boundaries: the reference mail report labels each run's end offset, while
@@ -26,20 +27,25 @@ failures remain report-only. Native errors are concise and invalid arguments
 return 2; UTF-8 is required on both file input and stdin (Python's stdin
 decoding depends on its runtime environment).
 
-## Remaining Work, in Recommended Order
-
 Ancestry now shares a UTF-8/universal-newline file reader with subsequent
 validators. `make check-ancestry` proves both-mode parity for every exported
 person and fixtures covering shared ancestors, cycles, unresolved links and
 terminal semantics. Native argument/help errors use concise diagnostics and
 require complete option names rather than argparse abbreviations.
 
+The structural checker preserves report bytes, ordering, output limits and
+report-only exit policy. `make check-structure` compares both exports and
+all diagnostic groups, including malformed/Unicode input. Native Unicode
+15.1 tables preserve Python decimal, word and repr semantics without locale
+or runtime Python dependencies; the checker retains UTF-8 replacement mode.
+
+## Remaining Work, in Recommended Order
+
 1. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools,
    creating and committing a separate feature branch for each conversion:
 
    | Python tool | Checks to preserve |
    |---|---|
-   | `tools/gedcom-check.py` | Syntax, nesting, line lengths, submitter, identifiers, pointers, reciprocal links, names, dates, family roles, and chronology |
    | `tools/gedcom-roles.py` | Suspicious child/spouse assignments, birth/marriage chronology, and one-spouse families |
    | `tools/gedcom-places.py` | Counts of events with places and place-only events |
 
