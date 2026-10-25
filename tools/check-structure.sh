@@ -109,6 +109,9 @@ nonsense
 GEDCOM
 compare 0
 cp "$structure_tmp/input.ged" "$structure_tmp/lf"
+# Missing xrefs are Python None keys, distinct from an empty pointer string.
+printf '0 INDI\n1 FAMS @FemptyPointer@\n0 @FemptyPointer@ FAM\n1 HUSB \n0 FAM\n1 HUSB @I1@\n' >> "$structure_tmp/input.ged"
+compare 0
 awk '{printf "%s\r\n", $0}' "$structure_tmp/lf" > "$structure_tmp/input.ged"
 compare 0
 tr '\n' '\r' < "$structure_tmp/lf" > "$structure_tmp/input.ged"

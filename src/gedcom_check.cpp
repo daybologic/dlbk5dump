@@ -40,6 +40,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -66,7 +67,7 @@ std::string List(const Strings& values, std::size_t limit = static_cast<std::siz
 	return "[" + Join(Strings(values.begin(), values.begin() + std::min(limit, values.size()))) + "]";
 }
 std::string Tuple(const Strings& values) { return "(" + Join(values) + ")"; }
-std::string Id(const std::string& value) { return value.empty() ? "None" : Repr(value); }
+std::string Id(const std::optional<std::string>& value) { return value ? Repr(*value) : "None"; }
 Strings Tags(const Record& record, const std::string& tag, std::uint64_t level = 1) {
 	Strings result;
 	for ( const auto& entry : record ) if ( entry.level == level && entry.tag == tag ) result.push_back(entry.value);
@@ -79,6 +80,9 @@ Strings Quoted(const Strings& values) {
 }
 bool Has(const Strings& values, const std::string& value) {
 	return std::find(values.begin(), values.end(), value) != values.end();
+}
+bool Has(const Strings& values, const std::optional<std::string>& value) {
+	return value && Has(values, *value);
 }
 bool Parse(const std::string& line, Entry& entry) {
 	std::size_t position = 0;
@@ -123,10 +127,10 @@ struct Counter {
 	}
 };
 struct OrderedRecords {
-	std::vector<std::pair<std::string, const Record *>> items;
-	std::map<std::string, const Record *> lookup;
+	std::vector<std::pair<std::optional<std::string>, const Record *>> items;
+	std::map<std::optional<std::string>, const Record *> lookup;
 	void Add(const Record& record) {
-		const auto& id = record.front().xref;
+		const auto id = record.front().xref.empty() ? std::nullopt : std::make_optional(record.front().xref);
 		if ( !lookup.count(id) ) items.emplace_back(id, &record);
 		else for ( auto& item : items ) if ( item.first == id ) item.second = &record;
 		lookup[id] = &record;
