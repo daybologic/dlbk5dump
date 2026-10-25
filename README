@@ -91,9 +91,29 @@ diagnostics/help use the native command name; option names must be complete
 (Python argparse also accepts unambiguous abbreviations). No Python or
 subprocesses are used during native ancestry inspection.
 
-Independent validation (Python 3 required):
+Structural validation is native C++ and needs only the GEDCOM:
 
-    ./tools/gedcom-check.py indexed.ged
+    ./dlbk5dump --check-gedcom indexed.ged
+    make check-structure
+
+This replaces tools/gedcom-check.py for ordinary use, preserving syntax and
+level checks, Unicode line lengths, duplicate IDs, submitter checks, pointer
+integrity, reciprocal links, family roles, names, dates and chronology.
+Reports retain Python list/tuple/Counter formatting and first-seen ordering,
+including stable ordering when Counter totals tie. Findings remain report-only
+and return 0; unreadable input or data before the first record returns 1.
+Native argument errors return 2 with concise diagnostics. Like the reference,
+this checker replaces malformed UTF-8 rather than rejecting the entire file.
+It uses the shared reader; Unicode 15.1 properties are frozen in native tables
+to preserve decimal recognition and repr escaping independently of locale.
+
+make check-structure compares both exports and temporary fixtures covering
+every diagnostic group, report limits, Unicode, malformed input and native
+execution without BK5 files or executables on PATH. The Python checker remains
+an independent reference; make check-gedcom still means export byte parity.
+
+Remaining independent validation (Python 3 required):
+
     ./tools/gedcom-roles.py indexed.ged
     ./tools/gedcom-places.py indexed.ged
 
