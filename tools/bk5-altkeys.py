@@ -29,7 +29,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Show non-empty fixed slots in the BK5 alternate-key file."""
+"""Reference for dlbk5dump --dump-altkeys; compare with make check-altkeys."""
 
 from pathlib import Path
 

@@ -32,9 +32,11 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "gedcom.hpp"
 
+#include "altkeys.hpp"
 #include "lookup.hpp"
 #include "marriage.hpp"
 #include "person.hpp"
+#include "text.hpp"
 
 #include <algorithm>
 #include <array>
@@ -42,7 +44,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <fstream>
 #include <functional>
-#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -56,6 +57,10 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <vector>
 
 namespace {
+using BK5Text::PythonRepr;
+using BK5Text::RStrip;
+using BK5Text::Strip;
+using BK5Text::WhitespaceWidth;
 using Strings = std::vector<std::string>;
 using Numbers = std::vector<std::uint32_t>;
 using Dates = std::vector<std::pair<std::string, std::string>>;
@@ -90,43 +95,6 @@ struct Family {
 	Strings dates, details, quality;
 	Numbers locations, sources, children;
 };
-
-std::size_t WhitespaceWidth(const std::string& value, std::size_t offset)
-{
-	if ( offset >= value.size() ) return 0;
-	const unsigned char ch = value[offset];
-	if ( ch < 128 ) return ch == ' ' || (ch >= 9 && ch <= 13)
-		|| (ch >= 28 && ch <= 31) ? 1 : 0;
-	// Python str.strip/split use Unicode whitespace, including the CP437
-	// non-breaking space. Do not depend on the process's C locale.
-	static const Strings spaces = {u8"\u0085", u8"\u00a0", u8"\u1680",
-		u8"\u2000", u8"\u2001", u8"\u2002", u8"\u2003", u8"\u2004",
-		u8"\u2005", u8"\u2006", u8"\u2007", u8"\u2008", u8"\u2009",
-		u8"\u200a", u8"\u2028", u8"\u2029", u8"\u202f", u8"\u205f", u8"\u3000"};
-	for ( const std::string& space : spaces )
-		if ( value.compare(offset, space.size(), space) == 0 ) return space.size();
-	return 0;
-}
-
-std::string RStrip(std::string value)
-{
-	std::size_t end = 0;
-	for ( std::size_t offset = 0; offset < value.size(); ) {
-		const std::size_t width = WhitespaceWidth(value, offset);
-		if ( width ) offset += width;
-		else end = ++offset;
-	}
-	value.resize(end);
-	return value;
-}
-
-std::string Strip(std::string value)
-{
-	value = RStrip(value);
-	std::size_t start = 0;
-	while ( const std::size_t width = WhitespaceWidth(value, start) ) start += width;
-	return value.substr(start);
-}
 
 Strings Split(const std::string& value, char delimiter)
 {
@@ -227,29 +195,6 @@ std::string Unquote(const std::string& value)
 	return result;
 }
 
-std::string PythonRepr(const std::string& value)
-{
-	// Match Python's repr used in notes about unsupported citation values.
-	const char quote = value.find('\'') != std::string::npos
-		&& value.find('"') == std::string::npos ? '"' : '\'';
-	std::string result(1, quote);
-	for ( unsigned char ch : value ) {
-		if ( ch == static_cast<unsigned char>(quote) || ch == '\\' ) {
-			result += '\\';
-			result += static_cast<char>(ch);
-		} else if ( ch == '\n' ) result += "\\n";
-		else if ( ch == '\r' ) result += "\\r";
-		else if ( ch == '\t' ) result += "\\t";
-		else if ( ch < 32 || ch == 127 ) {
-			std::ostringstream escaped;
-			escaped << "\\x" << std::hex << std::setw(2) << std::setfill('0')
-				<< static_cast<unsigned int>(ch);
-			result += escaped.str();
-		} else result += static_cast<char>(ch);
-	}
-	return result + quote;
-}
-
 // Keep the established dump decoders as the single decoding path. Capture
 // their diagnostic records in memory, using the same contract as the Python
 // reference, without starting subprocesses or duplicating binary layouts.
@@ -290,31 +235,6 @@ std::string ReadFile(const char *path)
 	if ( !input ) throw std::runtime_error(std::string("cannot open ") + path);
 	std::string result((std::istreambuf_iterator<char>(input)), {});
 	if ( input.bad() ) throw std::runtime_error(std::string("cannot read ") + path);
-	return result;
-}
-
-void AppendUtf8(std::string& result, char32_t ch)
-{
-	if ( ch < 0x80 ) result += static_cast<char>(ch);
-	else if ( ch < 0x800 ) {
-		result += static_cast<char>(0xc0 | (ch >> 6));
-		result += static_cast<char>(0x80 | (ch & 0x3f));
-	} else {
-		result += static_cast<char>(0xe0 | (ch >> 12));
-		result += static_cast<char>(0x80 | ((ch >> 6) & 0x3f));
-		result += static_cast<char>(0x80 | (ch & 0x3f));
-	}
-}
-
-std::string Cp437(const std::string& value)
-{
-	static const std::u32string high =
-		U"ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ"
-		U"áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐"
-		U"└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"
-		U"αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ";
-	std::string result;
-	for ( unsigned char ch : value ) AppendUtf8(result, ch < 128 ? ch : high[ch - 128]);
 	return result;
 }
 
@@ -363,13 +283,7 @@ void ExportData::Load()
 		const std::uint32_t id = std::stoul(m[1]);
 		sourceLines[id] = lines; sources[id] = Join(lines, " / ");
 	}
-	const std::string alt = ReadFile("BK5/ALTKEYS.DT5");
-	if ( alt.size() % 162 ) throw std::runtime_error("ALTKEYS.DT5 size is not a multiple of 162");
-	for ( std::size_t offset = 0; offset < alt.size(); offset += 162 ) {
-		const std::string slot = alt.substr(offset, 162);
-		const std::string text = Strip(Cp437(slot.substr(0, slot.find('<'))));
-		if ( !text.empty() ) altkeys.emplace_back(offset / 162, text);
-	}
+	altkeys = TReadAltKeys().Load().nonemptySlots;
 	const std::string mailData = ReadFile("BK5/BKMAIL.DT5");
 	std::size_t start = 0;
 	for ( std::size_t offset = 0; offset <= mailData.size(); ++offset ) {

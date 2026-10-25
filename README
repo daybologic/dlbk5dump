@@ -53,6 +53,7 @@ The ancestry tool follows explicit FAMC links only.
 
 Useful decoder commands:
 
+    ./dlbk5dump --dump-altkeys
     ./dlbk5dump --dump-id-records
     ./dlbk5dump --dump-records
     ./dlbk5dump --dump-families
@@ -61,9 +62,24 @@ Useful decoder commands:
     ./dlbk5dump --dump-locations
     ./dlbk5dump --dump-marriages
     ./dlbk5dump --family 0x9a
-    ./tools/bk5-altkeys.py
     ./tools/bk5-mail.py
     ./tools/bk5-options.py
+
+--dump-altkeys replaces tools/bk5-altkeys.py for normal use. It needs only
+BK5/ALTKEYS.DT5 and runs entirely in C++. It checks that the file consists
+of complete 162-byte slots, decodes CP437 text before the first '<', and
+reports non-empty slots with their original zero-based slot numbers. Blank
+slots contribute to the summary count; slot numbers are not person IDs.
+The GEDCOM exporter uses the same ALTKEYS reader. For this database:
+
+    ALTKEYS_SLOT slot=16 text='Bournemouth, Dorset'
+    ALTKEYS_SLOTS total=19 nonempty=1
+
+The Python script remains an independent reference. Run make check-altkeys
+to compare outputs byte for byte on the bundled file and temporary fixtures
+covering every CP437 byte, control/quote escaping, whitespace, full and empty
+slots, and invalid or missing input. The check also verifies that the native
+flag works without other database files or executables on PATH.
 
 The person decoder reads the key-0 index, then scans physical fixed slots
 for valid person numbers missing from the index. Raw-page scans preserve a

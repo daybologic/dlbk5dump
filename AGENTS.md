@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python reference exporter and independent audit tools.
+This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
 
 ## Build, Test, and Development Commands
 
@@ -22,6 +22,7 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --trace-family 31   # one family record, fields and raw bytes
 ./dlbk5dump --dump-sources      # decode all BKSOURCE.DT5 source records
 ./dlbk5dump --dump-locations    # decode all BKLOCATE.DT5 location records
+./dlbk5dump --dump-altkeys      # inspect non-empty 162-byte ALTKEYS slots
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 ./dlbk5dump --gedcom           # native C++ audit GEDCOM on stdout
 ./dlbk5dump --gedcom --clean   # native C++ GEDCOM without extraction notes
@@ -30,6 +31,7 @@ make gedcom-file
 make gedcom-clean-file          # indexed-clean.ged, without extraction notes
 make audit
 make check-gedcom              # byte-for-byte C++/Python parity, both modes
+make check-altkeys             # native/Python ALTKEYS parity and edge cases
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -48,8 +50,14 @@ Keep ordering, whitespace, UTF-8 encoding, note wrapping, citations, and final
 newlines identical in both implementations. File targets replace the previous
 GEDCOM only after a successful export.
 
-Run `./tools/bk5-altkeys.py` when auditing `ALTKEYS.DT5`; preserve non-empty
-slots as unassigned data unless a person identifier is independently proven.
+Run `./dlbk5dump --dump-altkeys` when auditing `ALTKEYS.DT5`; preserve
+non-empty slots as unassigned data unless a person identifier is independently
+proven. This flag needs only `BK5/ALTKEYS.DT5`; other modes retain their
+existing input checks. The native GEDCOM export shares the ALTKEYS reader.
+Keep `tools/bk5-altkeys.py` as the independent reference and run
+`make check-altkeys` after changing the reader or shared text helpers. The
+check covers all CP437 bytes, quoting, whitespace, slot counts and boundaries,
+empty/missing/malformed input, and execution without Python on `PATH`.
 Run `./tools/bk5-mail.py` to inspect the unassigned address-book text in
 `BKMAIL.DT5`; do not attach it to a person by name similarity alone.
 Run `./tools/bk5-options.py` to compare `BKOPTION.DT5` with its backup;
@@ -99,6 +107,10 @@ the linkage.
 ## Coding Style & Naming Conventions
 
 Match the existing C++ style: tabs for indentation, braces on the same line, and explicit standard-library headers. Keep declarations in headers and implementations in corresponding `.cpp` files. Use descriptive PascalCase for existing types and methods (for example, `TReadMarriages::Load`) and preserve the existing uppercase field naming in legacy data structures. Avoid changing record offsets or binary layouts without documenting the format assumptions.
+
+Copy the complete text of `COPYING` verbatim into a comment at the top of
+each source/build file. Keep any shebang on line 1 and place the notice
+immediately below it; retain all notice text and line breaks.
 
 ## Testing Guidelines
 
