@@ -112,9 +112,24 @@ every diagnostic group, report limits, Unicode, malformed input and native
 execution without BK5 files or executables on PATH. The Python checker remains
 an independent reference; make check-gedcom still means export byte parity.
 
+Family-role checks also run entirely in C++:
+
+    ./dlbk5dump --gedcom-roles indexed.ged
+    make check-roles
+
+The native command replaces tools/gedcom-roles.py, warning when a child's
+recorded birth/baptism is more than 15 years before the family's marriage
+or within 12 years of a spouse's birth/baptism. It also counts families with
+exactly one spouse entry. These are plausibility warnings, not inferred
+relationship corrections. Findings return 0, matching the reference.
+Preserve record order, repeated-ID replacement, first-date/year selection,
+unknown/zero-year handling and partial output before a later unresolved
+pointer fails. File/encoding/pointer errors return 1; native usage returns 2.
+make check-roles compares both exports and threshold/error fixtures without
+BK5 files or other executables on PATH. Keep the Python reference unchanged.
+
 Remaining independent validation (Python 3 required):
 
-    ./tools/gedcom-roles.py indexed.ged
     ./tools/gedcom-places.py indexed.ged
 
 The export remains an intermediate extraction: raw-only records appear

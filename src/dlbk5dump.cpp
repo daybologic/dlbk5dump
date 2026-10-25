@@ -44,6 +44,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "lookup.hpp"
 #include "gedcom.hpp"
 #include "gedcom_check.hpp"
+#include "gedcom_roles.hpp"
 #include "mail.hpp"
 #include "marriage.hpp"
 #include "options.hpp"
@@ -94,6 +95,10 @@ int main(int argc, char **argv)
 	if ( argc >= 2 && strcmp(argv[1], "--check-gedcom") == 0 ) {
 		if ( argc != 3 ) { fprintf(stderr, "Usage: %s --check-gedcom GEDCOM\n", argv[0]); return 2; }
 		return CheckGedcom(argv[2]);
+	}
+	if ( argc >= 2 && strcmp(argv[1], "--gedcom-roles") == 0 ) {
+		if ( argc != 3 ) { fprintf(stderr, "Usage: %s --gedcom-roles GEDCOM\n", argv[0]); return 2; }
+		return CheckGedcomRoles(argv[2]);
 	}
 	TReadLookups lookups;
 	TReadMarriages marriages;

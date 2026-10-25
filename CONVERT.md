@@ -11,6 +11,7 @@
 | `tools/bk5-audit.py` | `./dlbk5dump --audit [GEDCOM]` (stdin when omitted) |
 | `tools/bk5-ancestry.py` | `./dlbk5dump --ancestry GEDCOM [--person ID] [--terminals]` |
 | `tools/gedcom-check.py` | `./dlbk5dump --check-gedcom GEDCOM` |
+| `tools/gedcom-roles.py` | `./dlbk5dump --gedcom-roles GEDCOM` |
 
 Mail inspection and GEDCOM export share a reader that preserves both raw
 boundaries: the reference mail report labels each run's end offset, while
@@ -39,6 +40,11 @@ all diagnostic groups, including malformed/Unicode input. Native Unicode
 15.1 tables preserve Python decimal, word and repr semantics without locale
 or runtime Python dependencies; the checker retains UTF-8 replacement mode.
 
+Family-role checks preserve strict age thresholds, birth/baptism fallback,
+unknown and zero years, ordered duplicate replacement and partial reports
+on unresolved pointers. `make check-roles` compares both exports and edge
+fixtures with the unchanged reference. Warnings remain report-only.
+
 ## Remaining Work, in Recommended Order
 
 1. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools,
@@ -46,7 +52,6 @@ or runtime Python dependencies; the checker retains UTF-8 replacement mode.
 
    | Python tool | Checks to preserve |
    |---|---|
-   | `tools/gedcom-roles.py` | Suspicious child/spouse assignments, birth/marriage chronology, and one-spouse families |
    | `tools/gedcom-places.py` | Counts of events with places and place-only events |
 
 ## Conversion Requirements
