@@ -33,6 +33,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "gedcom.hpp"
 
 #include "altkeys.hpp"
+#include "diagnostic.hpp"
 #include "lookup.hpp"
 #include "mail.hpp"
 #include "marriage.hpp"
@@ -43,7 +44,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <array>
 #include <cctype>
 #include <cstdint>
-#include <functional>
 #include <iostream>
 #include <map>
 #include <regex>
@@ -59,7 +59,8 @@ namespace {
 using BK5Text::PythonRepr;
 using BK5Text::RStrip;
 using BK5Text::Strip;
-using BK5Text::WhitespaceWidth;
+using BK5Text::TextLines;
+using BK5Text::Words;
 using Strings = std::vector<std::string>;
 using Numbers = std::vector<std::uint32_t>;
 using Dates = std::vector<std::pair<std::string, std::string>>;
@@ -105,44 +106,6 @@ Strings Split(const std::string& value, char delimiter)
 			start = end + 1;
 		}
 	}
-	return result;
-}
-
-Strings Words(const std::string& value)
-{
-	Strings result;
-	std::size_t start = 0;
-	for ( std::size_t offset = 0; offset <= value.size(); ) {
-		const std::size_t width = WhitespaceWidth(value, offset);
-		if ( width || offset == value.size() ) {
-			if ( offset > start ) result.push_back(value.substr(start, offset - start));
-			if ( offset == value.size() ) break;
-			offset += width;
-			start = offset;
-		} else ++offset;
-	}
-	return result;
-}
-
-Strings TextLines(const std::string& value)
-{
-	Strings result;
-	std::size_t start = 0;
-	for ( std::size_t offset = 0; offset < value.size(); ) {
-		const unsigned char ch = value[offset];
-		std::size_t width = 0;
-		if ( (ch >= 10 && ch <= 13) || (ch >= 28 && ch <= 30) ) width = 1;
-		else if ( value.compare(offset, 2, u8"\u0085") == 0 ) width = 2;
-		else if ( value.compare(offset, 3, u8"\u2028") == 0
-			|| value.compare(offset, 3, u8"\u2029") == 0 ) width = 3;
-		if ( !width ) { ++offset; continue; }
-		result.push_back(value.substr(start, offset - start));
-		if ( ch == '\r' && offset + 1 < value.size() && value[offset + 1] == '\n' ) ++width;
-		offset += width;
-		start = offset;
-	}
-	if ( start < value.size() ) result.push_back(value.substr(start));
-	if ( result.empty() ) result.push_back("");
 	return result;
 }
 
@@ -194,28 +157,6 @@ std::string Unquote(const std::string& value)
 	return result;
 }
 
-// Keep the established dump decoders as the single decoding path. Capture
-// their diagnostic records in memory, using the same contract as the Python
-// reference, without starting subprocesses or duplicating binary layouts.
-std::string Capture(const std::function<int()>& dump)
-{
-	std::ostringstream buffer;
-	struct Restore {
-		std::ios state{nullptr};
-		std::streambuf *previous;
-		explicit Restore(std::streambuf *replacement) : previous(std::cout.rdbuf()) {
-			state.copyfmt(std::cout);
-			std::cout.rdbuf(replacement);
-		}
-		~Restore() {
-			std::cout.rdbuf(previous);
-			std::cout.copyfmt(state);
-		}
-	} restore(buffer.rdbuf());
-	if ( dump() != 0 ) throw std::runtime_error("record decoding failed");
-	return buffer.str();
-}
-
 struct ExportData {
 	std::map<std::uint32_t, Person> people;
 	std::vector<RawPerson> raw;
@@ -240,7 +181,7 @@ void ExportData::Load()
 		R"re(^PERSON_ID_RECORD id=(\d+) address=0x([0-9a-f]+) status=decoded decoded_length=(\d+) name="(.*?)" sex=(.) families=([^ ]*) occupation="(.*?)" notes="(.*?)" location_refs=([^ ]*) source_refs=([^ ]*) source_details=)re"
 		+ Join(citationFields, ",") + " source_quality=" + Join(citationFields, ",")
 		+ R"re( dates=(.*?)(?: source=([^ ]+))?$)re");
-	for ( const std::string& line : Split(Capture([&]() { return persons.DumpIdRecords(); }), '\n') ) {
+	for ( const std::string& line : Split(CaptureDiagnosticOutput([&]() { return persons.DumpIdRecords(); }), '\n') ) {
 		std::smatch m;
 		if ( std::regex_match(line, m, personRe) ) {
 			Person p;
@@ -257,13 +198,13 @@ void ExportData::Load()
 		} else if ( line.rfind("PERSON_ID_RECORD ", 0) == 0 ) unresolved.push_back(line);
 	}
 	const std::regex locationRe("^LOCATION_RECORD id=(\\d+) address=0x[0-9a-f]+ name=" + quoted + "$");
-	for ( const std::string& line : Split(Capture([&]() { return lookups.DumpLocations(); }), '\n') ) {
+	for ( const std::string& line : Split(CaptureDiagnosticOutput([&]() { return lookups.DumpLocations(); }), '\n') ) {
 		std::smatch m;
 		if ( std::regex_match(line, m, locationRe) ) locations[std::stoul(m[1])] = Unquote(m[2]);
 	}
 	const std::regex sourceRe("^SOURCE_RECORD id=(\\d+) address=0x[0-9a-f]+ line_1="
 		+ quoted + " line_2=" + quoted + " line_3=" + quoted + "$");
-	for ( const std::string& line : Split(Capture([&]() { return lookups.DumpSources(); }), '\n') ) {
+	for ( const std::string& line : Split(CaptureDiagnosticOutput([&]() { return lookups.DumpSources(); }), '\n') ) {
 		std::smatch m;
 		if ( !std::regex_match(line, m, sourceRe) ) continue;
 		Strings lines;
@@ -277,7 +218,7 @@ void ExportData::Load()
 	altkeys = TReadAltKeys().Load().nonemptySlots;
 	mail = TReadMail().Load();
 	const std::regex rawRe(R"re(^PERSON_RECORD offset=(\d+)(?: person_id=(\d+))? leading_numeric=0x[0-9a-f]+ raw_name="(.*?)" sex=(.) families=([^ ]*) dates=(.*)$)re");
-	for ( const std::string& line : Split(Capture([&]() { return persons.DumpRecords(); }), '\n') ) {
+	for ( const std::string& line : Split(CaptureDiagnosticOutput([&]() { return persons.DumpRecords(); }), '\n') ) {
 		std::smatch m;
 		if ( !std::regex_match(line, m, rawRe) ) continue;
 		RawPerson p;
@@ -288,7 +229,7 @@ void ExportData::Load()
 		raw.push_back(std::move(p));
 	}
 	const std::regex familyRe(R"re(^FAMILY_RECORD id=(\d+) address=0x([0-9a-f]+) indexed=(yes|no) husband=(\d+) wife=(\d+) date_1="(.*?)" date_2="(.*?)" location_refs=(\d+),(\d+) source_refs=(\d+),(\d+),(\d+) source_details="(.*?)","(.*?)","(.*?)" source_quality="(.*?)","(.*?)","(.*?)" status="(.*?)" children=([\d,]*) stamp=(\S*) flag="(.*?)"$)re");
-	for ( const std::string& line : Split(Capture([&]() { return marriages.DumpFamilies(); }), '\n') ) {
+	for ( const std::string& line : Split(CaptureDiagnosticOutput([&]() { return marriages.DumpFamilies(); }), '\n') ) {
 		std::smatch m;
 		if ( !std::regex_match(line, m, familyRe) ) continue;
 		Family f;
