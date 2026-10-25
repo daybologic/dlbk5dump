@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
+This repository contains a C++ reverse-engineering utility for BK5 family-history data. Application entry code is in `src/dlbk5dump.cpp`; person, marriage, lookup, ALTKEYS, options, and Btrieve decoding live in their corresponding `src/` modules. Native GEDCOM export is in `src/gedcom.cpp` and `src/gedcom.hpp`; `src/text.cpp` shares CP437 decoding, whitespace handling, and diagnostic quoting. The `BK5/` directory holds the legacy database and program files used as runtime input, while `bk5.iso` is the source disk image. `tools/` contains the retained Python references and independent audit tools.
 
 ## Build, Test, and Development Commands
 
@@ -23,6 +23,7 @@ Run it from the repository root so its relative `BK5/...` paths resolve correctl
 ./dlbk5dump --dump-sources      # decode all BKSOURCE.DT5 source records
 ./dlbk5dump --dump-locations    # decode all BKLOCATE.DT5 location records
 ./dlbk5dump --dump-altkeys      # inspect non-empty 162-byte ALTKEYS slots
+./dlbk5dump --dump-options      # compare BKOPTION.DT5 with BKOPTION.BAK
 ./dlbk5dump --family 0x9a       # inspect one family in raw person data
 ./dlbk5dump --gedcom           # native C++ audit GEDCOM on stdout
 ./dlbk5dump --gedcom --clean   # native C++ GEDCOM without extraction notes
@@ -32,6 +33,7 @@ make gedcom-clean-file          # indexed-clean.ged, without extraction notes
 make audit
 make check-gedcom              # byte-for-byte C++/Python parity, both modes
 make check-altkeys             # native/Python ALTKEYS parity and edge cases
+make check-options             # native/Python options parity and edge cases
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -52,16 +54,24 @@ GEDCOM only after a successful export.
 
 Run `./dlbk5dump --dump-altkeys` when auditing `ALTKEYS.DT5`; preserve
 non-empty slots as unassigned data unless a person identifier is independently
-proven. This flag needs only `BK5/ALTKEYS.DT5`; other modes retain their
-existing input checks. The native GEDCOM export shares the ALTKEYS reader.
+proven. This flag needs only `BK5/ALTKEYS.DT5` and is independent of other
+database files. The native GEDCOM export shares the ALTKEYS reader.
 Keep `tools/bk5-altkeys.py` as the independent reference and run
 `make check-altkeys` after changing the reader or shared text helpers. The
 check covers all CP437 bytes, quoting, whitespace, slot counts and boundaries,
 empty/missing/malformed input, and execution without Python on `PATH`.
 Run `./tools/bk5-mail.py` to inspect the unassigned address-book text in
 `BKMAIL.DT5`; do not attach it to a person by name similarity alone.
-Run `./tools/bk5-options.py` to compare `BKOPTION.DT5` with its backup;
-configuration differences must not be interpreted as genealogy records.
+Run `./dlbk5dump --dump-options` to compare `BKOPTION.DT5` with
+`BKOPTION.BAK`; this flag needs only those two files. Configuration
+differences must not be interpreted as genealogy records. Keep
+`tools/bk5-options.py` as the reference and run `make check-options` after
+changing the comparison. Preserve CP437 decoding, CR/LF/CRLF boundaries,
+trailing-whitespace trimming, leading/key whitespace, last-value-wins
+duplicates, first-'=' splitting, Unicode key ordering, and the literal
+`<missing>` sentinel. A successful comparison returns 0 even with differences;
+missing/unreadable input returns 1 and invalid arguments return 2. Read both
+files before emitting output so input errors cannot leave a partial report.
 Run `./tools/gedcom-check.py indexed.ged`, `./tools/gedcom-roles.py
 indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.

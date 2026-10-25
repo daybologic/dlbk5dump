@@ -33,10 +33,10 @@ CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 
 TARGET  := dlbk5dump
 SOURCES := src/altkeys.cpp src/btrieve.cpp src/dlbk5dump.cpp src/gedcom.cpp \
-	src/lookup.cpp src/marriage.cpp src/person.cpp src/text.cpp
+	src/lookup.cpp src/marriage.cpp src/options.cpp src/person.cpp src/text.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys
+.PHONY: all clean gedcom gedcom-file gedcom-clean-file audit check-gedcom check-altkeys check-options
 
 all: $(TARGET)
 
@@ -63,6 +63,9 @@ check-gedcom: $(TARGET)
 
 check-altkeys: $(TARGET)
 	@sh tools/check-altkeys.sh
+
+check-options: $(TARGET)
+	@sh tools/check-options.sh
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
