@@ -39,6 +39,8 @@ make check-altkeys             # native/Python ALTKEYS parity and edge cases
 make check-options             # native/Python options parity and edge cases
 make check-mail                # mail report/input parity and edge cases
 make check-audit               # extraction report and exit-status parity
+./dlbk5dump --ancestry indexed.ged --person 3 --terminals
+make check-ancestry            # both ancestry modes, every exported person
 ```
 
 The program checks for required `.DT5` files before reading them. `--dump-id-records` first reads the key-0 index, then scans physical 29-byte fixed-record slots to recover valid person numbers that are absent from that index; it does not infer numbers from names or slot order. Records that cannot be reconstructed are reported as failures, not treated as deleted. `--dump-records` and `--family` scan raw variable pages and preserve another view of records. Use the bundled BK5 data for parity and smoke tests and inspect representative output.
@@ -103,6 +105,20 @@ duplicates, first-'=' splitting, Unicode key ordering, and the literal
 `<missing>` sentinel. A successful comparison returns 0 even with differences;
 missing/unreadable input returns 1 and invalid arguments return 2. Read both
 files before emitting output so input errors cannot leave a partial report.
+`--ancestry GEDCOM [--person ID] [--terminals]` is standalone C++ and
+needs only that GEDCOM, not BK5 inputs. `src/ancestry.cpp` uses the shared
+UTF-8 and universal-newline reader in `src/gedcom_reader.cpp`. Preserve the
+reference's explicit FAMC traversal, global visited set, input parent/family
+ordering, unresolved links, duplicate record replacement and terminal
+semantics (an existing parentless family is not a terminal person). Person
+IDs are strings, defaulting to `3`; synthetic IDs are supported. Keep
+`tools/bk5-ancestry.py` independent; run `make check-ancestry` after changes.
+It compares tree/terminal output for every exported individual and edge
+fixtures, including operation without BK5 or other executables on PATH.
+Input errors return 1; missing people and invalid arguments return 2.
+Native help/error text differs; use full option names rather than argparse
+abbreviations. Do not silently repair permissive reference parsing rules.
+
 Run `./tools/gedcom-check.py indexed.ged`, `./tools/gedcom-roles.py
 indexed.ged` and `./tools/gedcom-places.py indexed.ged` as independent
 checks of GEDCOM structure, family-role plausibility and place events.

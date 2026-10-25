@@ -9,6 +9,7 @@
 | `tools/bk5-options.py` | `./dlbk5dump --dump-options` |
 | `tools/bk5-mail.py` | `./dlbk5dump --dump-mail` |
 | `tools/bk5-audit.py` | `./dlbk5dump --audit [GEDCOM]` (stdin when omitted) |
+| `tools/bk5-ancestry.py` | `./dlbk5dump --ancestry GEDCOM [--person ID] [--terminals]` |
 
 Mail inspection and GEDCOM export share a reader that preserves both raw
 boundaries: the reference mail report labels each run's end offset, while
@@ -27,12 +28,14 @@ decoding depends on its runtime environment).
 
 ## Remaining Work, in Recommended Order
 
-1. **Ancestry — `tools/bk5-ancestry.py`.** Port ancestor-tree traversal and
-   terminal-ancestor listing, preserving person selection, family identifiers,
-   unresolved records, and cycle handling. Follow explicit parent-family links
-   only. Establish a shared native GEDCOM reader for subsequent validators.
+Ancestry now shares a UTF-8/universal-newline file reader with subsequent
+validators. `make check-ancestry` proves both-mode parity for every exported
+person and fixtures covering shared ancestors, cycles, unresolved links and
+terminal semantics. Native argument/help errors use concise diagnostics and
+require complete option names rather than argparse abbreviations.
 
-2. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools:
+1. **GEDCOM validation.** Reuse the GEDCOM reader for these remaining tools,
+   creating and committing a separate feature branch for each conversion:
 
    | Python tool | Checks to preserve |
    |---|---|
