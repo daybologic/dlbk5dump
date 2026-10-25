@@ -34,6 +34,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "altkeys.hpp"
 #include "lookup.hpp"
+#include "mail.hpp"
 #include "marriage.hpp"
 #include "person.hpp"
 #include "text.hpp"
@@ -42,10 +43,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <array>
 #include <cctype>
 #include <cstdint>
-#include <fstream>
 #include <functional>
 #include <iostream>
-#include <iterator>
 #include <map>
 #include <regex>
 #include <set>
@@ -224,19 +223,11 @@ struct ExportData {
 	std::map<std::uint32_t, std::string> locations, sources;
 	std::map<std::uint32_t, Strings> sourceLines;
 	Strings unresolved;
-	std::vector<std::pair<std::size_t, std::string>> altkeys, mail;
+	std::vector<std::pair<std::size_t, std::string>> altkeys;
+	TMailTextRuns mail;
 	Links links;
 	void Load();
 };
-
-std::string ReadFile(const char *path)
-{
-	std::ifstream input(path, std::ios::binary);
-	if ( !input ) throw std::runtime_error(std::string("cannot open ") + path);
-	std::string result((std::istreambuf_iterator<char>(input)), {});
-	if ( input.bad() ) throw std::runtime_error(std::string("cannot read ") + path);
-	return result;
-}
 
 void ExportData::Load()
 {
@@ -284,14 +275,7 @@ void ExportData::Load()
 		sourceLines[id] = lines; sources[id] = Join(lines, " / ");
 	}
 	altkeys = TReadAltKeys().Load().nonemptySlots;
-	const std::string mailData = ReadFile("BK5/BKMAIL.DT5");
-	std::size_t start = 0;
-	for ( std::size_t offset = 0; offset <= mailData.size(); ++offset ) {
-		if ( offset < mailData.size() && mailData[offset] >= 32 && mailData[offset] < 127 ) continue;
-		const std::string text = Strip(mailData.substr(start, offset - start));
-		if ( text.size() >= 3 ) mail.emplace_back(start, text);
-		start = offset + 1;
-	}
+	mail = TReadMail().Load();
 	const std::regex rawRe(R"re(^PERSON_RECORD offset=(\d+)(?: person_id=(\d+))? leading_numeric=0x[0-9a-f]+ raw_name="(.*?)" sex=(.) families=([^ ]*) dates=(.*)$)re");
 	for ( const std::string& line : Split(Capture([&]() { return persons.DumpRecords(); }), '\n') ) {
 		std::smatch m;
@@ -555,7 +539,7 @@ void Writer::Write()
 	};
 	for ( const auto& slot : data.altkeys ) header.push_back("ALTKEYS slot " + std::to_string(slot.first) + ": " + slot.second);
 	header.push_back(std::to_string(data.mail.size()) + " unassigned BKMAIL.DT5 text runs are preserved.");
-	for ( const auto& run : data.mail ) header.push_back("BKMAIL offset 0x" + Hex(run.first) + ": " + run.second);
+	for ( const auto& run : data.mail ) header.push_back("BKMAIL offset 0x" + Hex(run.start) + ": " + run.text);
 	header.push_back("BK5 date slots 1-4 are exported as BIRT, BAPM, DEAT, and BURI;");
 	header.push_back("slot 5 remains an audit note because it is the other-date field.");
 	if ( clean ) Note("Exported from Brother's Keeper 5 data by dlbk5dump. Extraction notes are omitted; run without --clean for the audit export.");

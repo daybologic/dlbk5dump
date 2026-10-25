@@ -29,7 +29,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Show printable, unassigned text runs from BK5/BKMAIL.DT5."""
+"""Reference for dlbk5dump --dump-mail; compare with make check-mail."""
 
 from pathlib import Path
 
